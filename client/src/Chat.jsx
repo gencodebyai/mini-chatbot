@@ -56,37 +56,16 @@ function Chat() {
 
     try {
       const response = await axios.post(`${serverURL}/api/chat`, {
-        messages: updatedMessages,
-        baseURL,
-        apiKey,
-        modelName
+        messages: updatedMessages
       })
       
-      // 更新消息时也要检查轮次限制
-      setMessages(prev => {
-        const newMessages = [...prev, response.data]
-        const turns = getCurrentTurns(newMessages)
-        
-        if (turns > maxHistoryLength) {
-          const systemMessage = newMessages[0]
-          const recentMessages = []
-          let currentTurns = 0
-          
-          for (let i = newMessages.length - 1; i > 0; i--) {
-            recentMessages.unshift(newMessages[i])
-            if (newMessages[i].role === 'user') {
-              currentTurns++
-              if (currentTurns === maxHistoryLength) break
-            }
-          }
-          
-          return [systemMessage, ...recentMessages]
-        }
-        return newMessages
-      })
+      setMessages(prev => [...prev, response.data])
     } catch (error) {
       console.error('Error:', error)
-      setMessages(prev => [...prev, { role: 'assistant', content: '发生错误：' + error.message }])
+      setMessages(prev => [...prev, { 
+        role: 'assistant', 
+        content: '发生错误：' + (error.response?.data?.message || error.message)
+      }])
     }
   }
 
