@@ -262,7 +262,7 @@ function Chat() {
 
   useEffect(() => {
     scrollToBottom()
-  }, [displayMessages, currentResponse])
+  }, [displayMessages, currentResponse, reasoningText])
 
   // 计算当前对话轮次
   const getCurrentTurns = (msgs) => {
@@ -731,9 +731,9 @@ function Chat() {
                     isUser={false}
                   />
                 )}
+                <div ref={messagesEndRef} style={{ height: '1px', margin: '0' }} />
               </>
             )}
-            <div ref={messagesEndRef} style={{ height: '1px' }} />
           </>
         )}
       </div>
