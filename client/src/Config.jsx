@@ -1,7 +1,10 @@
 // 测试用配置
 export const baseURL = 'https://api.deepseek.com';
 export const apiKey = 'your-api-key';
-export const modelName = 'deepseek-chat';  // 添加模型名称
+export const modelOptions = [
+  'deepseek-chat',
+  'deepseek-reasoner'
+];
 export const maxHistoryLength = 10;  // 添加最大对话长度配置
 
 // API 地址

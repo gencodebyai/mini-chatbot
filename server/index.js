@@ -54,40 +54,73 @@ app.post('/api/chat', async (req, res) => {
     PORT: process.env.PORT,
     API_KEY: process.env.DEEPSEEK_API_KEY ? '已配置' : '未配置'
   });
-  console.log('请求体:', {
+  
+  // 添加详细的请求日志
+  console.log('请求详情:', {
+    model: req.body.model,
     messagesCount: req.body.messages?.length,
-    firstMessage: req.body.messages?.[0]
+    messages: req.body.messages?.map(msg => ({
+      role: msg.role,
+      contentPreview: msg.content?.slice(0, 50) + (msg.content?.length > 50 ? '...' : '')
+    }))
   });
 
-  console.log('收到请求，消息数量:', req.body.messages.length);
-
   try {
-    // 使用后端的 API Key，而不是从前端传递
     const openai = new OpenAI({
       baseURL: 'https://api.deepseek.com',
       apiKey: API_KEY
     });
 
-    // 添加请求验证
     if (!req.body.messages || !Array.isArray(req.body.messages)) {
       return res.status(400).json({ error: '无效的消息格式' });
     }
 
-    const completion = await openai.chat.completions.create({
-      messages: req.body.messages,
-      model: 'deepseek-chat',
-      temperature: 0.7
+    // 添加 API 请求日志
+    console.log('发送到 DeepSeek 的请求:', {
+      model: req.body.model,
+      stream: true,
+      messages: req.body.messages
     });
 
-    // 添加响应处理
-    const response = completion.choices[0].message;
-    
-    // 可以添加响应日志
-    console.log('API响应成功');
+    const response = await fetch('https://api.deepseek.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${API_KEY}`
+      },
+      body: JSON.stringify({
+        model: req.body.model || 'deepseek-chat',
+        messages: req.body.messages,
+        stream: true
+      })
+    });
 
-    res.json(response);
+    // 添加响应状态日志
+    console.log('DeepSeek API 响应状态:', response.status);
+
+    // 设置响应头
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+
+    // 直接转发流式响应
+    const reader = response.body.getReader();
+    
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      
+      res.write(new TextDecoder().decode(value));
+    }
+
+    res.write(`data: [DONE]\n\n`);
+    res.end();
   } catch (error) {
-    console.error('API 请求错误:', error.response?.data || error.message);
+    console.error('API 请求错误:', {
+      message: error.message,
+      response: error.response?.data,
+      stack: error.stack
+    });
     res.status(500).json({ 
       error: '服务器错误',
       message: process.env.NODE_ENV === 'development' ? error.message : '请稍后重试'
