@@ -14,10 +14,19 @@ const limiter = rateLimit({
 
 // 配置 CORS
 app.use(cors({
-  origin: [
-    'http://localhost:5173',
-    'https://gencodebyai.github.io/mini-chatbot/',  // 替换成你的 GitHub Pages 域名
-  ],
+  origin: function(origin, callback) {
+    const allowedOrigins = [
+      'http://localhost:5173',
+      'https://gencodebyai.github.io'
+    ];
+    
+    // 允许来自允许列表的请求
+    if (!origin || allowedOrigins.some(allowed => origin.startsWith(allowed))) {
+      callback(null, true);
+    } else {
+      callback(new Error('不允许的来源'));
+    }
+  },
   methods: ['GET', 'POST'],
   credentials: true
 }));
