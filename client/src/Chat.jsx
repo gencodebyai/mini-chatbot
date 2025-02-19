@@ -182,6 +182,29 @@ const MessageBubble = ({ content, reasoningContent, isUser, onRetry, onCopy, onE
               marginLeft: '15px'
             }}>
               <button
+                onClick={() => onCopy?.(content)}
+                style={{
+                  border: 'none',
+                  background: 'none',
+                  color: '#666',
+                  fontSize: '12px',
+                  cursor: 'pointer',
+                  padding: '4px 8px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  opacity: 0.7,
+                  transition: 'opacity 0.2s'
+                }}
+                onMouseEnter={e => e.target.style.opacity = 1}
+                onMouseLeave={e => e.target.style.opacity = 0.7}
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h6a2 2 0 012 2v8a2 2 0 01-2 2h-2"/>
+                </svg>
+                复制
+              </button>
+              <button
                 onClick={() => onRetry?.(content)}
                 style={{
                   border: 'none',
@@ -688,7 +711,7 @@ function Chat() {
                 reasoningContent={msg.reasoning_content}
                 isUser={msg.role === 'user'}
                 onRetry={!msg.isUser ? () => handleRetry(msg) : null}
-                onCopy={msg.role === 'user' ? () => handleCopy(msg.content) : null}
+                onCopy={!msg.isUser ? () => handleCopy(msg.content) : () => handleCopy(msg.content)}
                 onEdit={msg.role === 'user' ? (newContent) => handleEdit(msg, newContent) : null}
               />
             ))}
