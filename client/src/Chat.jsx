@@ -23,11 +23,29 @@ function Chat() {
     return msgs.filter(msg => msg.role === 'user').length
   }
 
+  // 添加测试函数
+  const testConnection = async () => {
+    try {
+      console.log('测试连接到:', serverURL);
+      const response = await axios.get(`${serverURL}/api/test`);
+      console.log('测试响应:', response.data);
+    } catch (error) {
+      console.error('测试失败:', error.response?.data || error.message);
+    }
+  };
+
+  // 在组件加载时测试连接
+  useEffect(() => {
+    testConnection();
+  }, []);
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     if (!input.trim()) return
 
     const newMessage = { role: 'user', content: input }
+    console.log('准备发送消息到:', serverURL);
+    console.log('消息内容:', newMessage);
     
     // 保持系统消息，并限制历史消息数量
     let updatedMessages = [...messages, newMessage]
@@ -55,13 +73,19 @@ function Chat() {
     setInput('')
 
     try {
+      console.log('发送请求...');
       const response = await axios.post(`${serverURL}/api/chat`, {
         messages: updatedMessages
       })
+      console.log('收到响应:', response.data);
       
       setMessages(prev => [...prev, response.data])
     } catch (error) {
-      console.error('Error:', error)
+      console.error('请求失败:', {
+        error: error.message,
+        response: error.response?.data,
+        status: error.response?.status
+      });
       setMessages(prev => [...prev, { 
         role: 'assistant', 
         content: '发生错误：' + (error.response?.data?.message || error.message)
@@ -75,6 +99,20 @@ function Chat() {
   return (
     <div style={{ maxWidth: '800px', margin: '0 auto', padding: '20px' }}>
       <h1>Mini Chatbot</h1>
+      <button 
+        onClick={testConnection}
+        style={{ 
+          marginBottom: '10px',
+          padding: '5px 10px',
+          backgroundColor: '#4CAF50',
+          color: 'white',
+          border: 'none',
+          borderRadius: '4px',
+          cursor: 'pointer'
+        }}
+      >
+        测试连接
+      </button>
       <div style={{ 
         marginBottom: '10px', 
         textAlign: 'right', 
