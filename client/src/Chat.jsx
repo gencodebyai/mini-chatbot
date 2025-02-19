@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react'
 import axios from 'axios'
-import { baseURL, apiKey, modelName, maxHistoryLength } from './Config'
+import { baseURL, apiKey, modelName, maxHistoryLength, serverURL } from './Config'
 
 function Chat() {
   const [messages, setMessages] = useState([
@@ -55,7 +55,7 @@ function Chat() {
     setInput('')
 
     try {
-      const response = await axios.post('http://localhost:3000/api/chat', {
+      const response = await axios.post(`${serverURL}/api/chat`, {
         messages: updatedMessages,
         baseURL,
         apiKey,
