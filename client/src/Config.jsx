@@ -2,6 +2,8 @@
 export const baseURL = 'https://api.deepseek.com';
 export const apiKey = 'your-api-key';
 export const modelOptions = [
+  'deepseek-v3-241226',
+  'deepseek-r1-250120',
   'deepseek-chat',
   'deepseek-reasoner'
 ];

@@ -34,8 +34,25 @@ app.use(cors({
 app.use(limiter);
 app.use(express.json());
 
-// 从环境变量获取 API Key
-const API_KEY = process.env.DEEPSEEK_API_KEY;
+// 添加新的 API 配置
+const API_CONFIGS = {
+  'deepseek-chat': {
+    baseURL: 'https://api.deepseek.com/v1/chat/completions',
+    apiKey: process.env.DEEPSEEK_API_KEY
+  },
+  'deepseek-reasoner': {
+    baseURL: 'https://api.deepseek.com/v1/chat/completions',
+    apiKey: process.env.DEEPSEEK_API_KEY
+  },
+  'deepseek-v3-241226': {
+    baseURL: 'https://ark.cn-beijing.volces.com/api/v3/chat/completions',
+    apiKey: process.env.VOLCES_API_KEY
+  },
+  'deepseek-r1-250120': {
+    baseURL: 'https://ark.cn-beijing.volces.com/api/v3/chat/completions',
+    apiKey: process.env.VOLCES_API_KEY
+  }
+};
 
 // 添加一个测试端点
 app.get('/api/test', (req, res) => {
@@ -48,79 +65,145 @@ app.get('/api/test', (req, res) => {
 });
 
 app.post('/api/chat', async (req, res) => {
-  console.log('收到聊天请求');
-  console.log('环境变量:', {
-    NODE_ENV: process.env.NODE_ENV,
-    PORT: process.env.PORT,
-    API_KEY: process.env.DEEPSEEK_API_KEY ? '已配置' : '未配置'
+  const model = req.body.model || 'deepseek-chat';
+  const apiConfig = API_CONFIGS[model];
+  const requestId = Math.random().toString(36).substring(7);
+
+  // 请求开始日志
+  console.log('\n=== 请求开始 ===', {
+    requestId,
+    timestamp: new Date().toISOString(),
+    model
   });
-  
-  // 添加详细的请求日志
-  console.log('请求详情:', {
-    model: req.body.model,
-    messagesCount: req.body.messages?.length,
+
+  // 详细的请求信息日志
+  console.log('\n[请求详情]', {
+    requestId,
+    model,
+    apiEndpoint: apiConfig.baseURL,
     messages: req.body.messages?.map(msg => ({
       role: msg.role,
-      contentPreview: msg.content?.slice(0, 50) + (msg.content?.length > 50 ? '...' : '')
-    }))
+      content: msg.content?.length > 50 
+        ? `${msg.content.slice(0, 50)}...` 
+        : msg.content,
+      length: msg.content?.length
+    })),
+    totalMessages: req.body.messages?.length,
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ***' + (apiConfig.apiKey || '').slice(-4)
+    }
   });
 
   try {
-    const openai = new OpenAI({
-      baseURL: 'https://api.deepseek.com',
-      apiKey: API_KEY
+    // API 请求日志
+    console.log('\n[发送请求]', {
+      requestId,
+      url: apiConfig.baseURL,
+      method: 'POST',
+      model,
+      stream: true
     });
 
-    if (!req.body.messages || !Array.isArray(req.body.messages)) {
-      return res.status(400).json({ error: '无效的消息格式' });
-    }
-
-    // 添加 API 请求日志
-    console.log('发送到 DeepSeek 的请求:', {
-      model: req.body.model,
-      stream: true,
-      messages: req.body.messages
-    });
-
-    const response = await fetch('https://api.deepseek.com/v1/chat/completions', {
+    const response = await fetch(apiConfig.baseURL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${API_KEY}`
+        'Authorization': `Bearer ${apiConfig.apiKey}`
       },
       body: JSON.stringify({
-        model: req.body.model || 'deepseek-chat',
+        model,
         messages: req.body.messages,
         stream: true
       })
     });
 
-    // 添加响应状态日志
-    console.log('DeepSeek API 响应状态:', response.status);
+    // 响应状态日志
+    console.log('\n[响应状态]', {
+      requestId,
+      status: response.status,
+      statusText: response.statusText,
+      headers: Object.fromEntries(response.headers.entries())
+    });
+
+    if (!response.ok) {
+      throw new Error(`API 请求失败: ${response.status} ${response.statusText}`);
+    }
 
     // 设置响应头
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
 
-    // 直接转发流式响应
+    // 收集完整响应
+    let fullContent = '';
+    let fullReasoningContent = '';
+    let chunkCount = 0;
+    
+    // 设置响应头和处理流式响应
     const reader = response.body.getReader();
     
     while (true) {
       const { value, done } = await reader.read();
-      if (done) break;
+      if (done) {
+        // 完整响应日志
+        console.log('\n[响应完成]', {
+          requestId,
+          timestamp: new Date().toISOString(),
+          totalChunks: chunkCount,
+          contentLength: fullContent.length,
+          reasoningLength: fullReasoningContent.length,
+          content: fullContent.length > 100 
+            ? `${fullContent.slice(0, 100)}...` 
+            : fullContent,
+          reasoning_content: fullReasoningContent.length > 100 
+            ? `${fullReasoningContent.slice(0, 100)}...` 
+            : fullReasoningContent
+        });
+        console.log('\n=== 请求结束 ===\n');
+        break;
+      }
       
-      res.write(new TextDecoder().decode(value));
+      chunkCount++;
+      const chunk = new TextDecoder().decode(value);
+      const lines = chunk.split('\n');
+      
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          const data = line.slice(5).trim();
+          if (data !== '[DONE]') {
+            try {
+              const parsed = JSON.parse(data);
+              const content = parsed.choices[0]?.delta?.content;
+              const reasoningContent = parsed.choices[0]?.delta?.reasoning_content;
+              
+              if (content) fullContent += content;
+              if (reasoningContent) fullReasoningContent += reasoningContent;
+            } catch (e) {
+              console.error('解析响应出错:', e);
+            }
+          }
+          res.write(line + '\n');
+        }
+      }
     }
 
-    res.write(`data: [DONE]\n\n`);
+    res.write('data: [DONE]\n\n');
     res.end();
   } catch (error) {
-    console.error('API 请求错误:', {
-      message: error.message,
-      response: error.response?.data,
-      stack: error.stack
+    // 错误日志
+    console.error('\n[错误]', {
+      requestId,
+      timestamp: new Date().toISOString(),
+      error: {
+        name: error.name,
+        message: error.message,
+        stack: error.stack?.split('\n').slice(0, 3)
+      },
+      apiEndpoint: apiConfig.baseURL
     });
+    console.log('\n=== 请求异常结束 ===\n');
+
     res.status(500).json({ 
       error: '服务器错误',
       message: process.env.NODE_ENV === 'development' ? error.message : '请稍后重试'

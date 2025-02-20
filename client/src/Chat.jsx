@@ -1,12 +1,14 @@
 import React, { useState, useRef, useEffect } from 'react'
 import axios from 'axios'
 import { baseURL, apiKey, modelOptions, maxHistoryLength, serverURL } from './Config'
+import ReactMarkdown from 'react-markdown'
 
 // 修改 MessageBubble 组件以同时显示两种内容
-const MessageBubble = ({ content, reasoningContent, isUser, onRetry, onCopy, onEdit }) => {
+const MessageBubble = ({ content, reasoningContent, isUser, onRetry, onCopy, onEdit, isStreaming }) => {
   const [showButtons, setShowButtons] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState(content);
+  const [isReasoningExpanded, setIsReasoningExpanded] = useState(false);  // 添加展开状态
 
   const handleEditSubmit = () => {
     onEdit(editContent);
@@ -22,18 +24,87 @@ const MessageBubble = ({ content, reasoningContent, isUser, onRetry, onCopy, onE
           justifyContent: 'flex-start',
           width: '100%'
         }}>
-          <div style={{
-            backgroundColor: '#f5f5f5',
-            padding: '10px 15px',
-            borderRadius: '15px',
-            maxWidth: '85%',
-            wordBreak: 'break-word',
-            boxShadow: '0 1px 2px rgba(0,0,0,0.1)',
-            fontSize: '1em',
-            lineHeight: '1.4',
-            color: '#666'
-          }}>
-            {reasoningContent}
+          <div 
+            onClick={() => setIsReasoningExpanded(!isReasoningExpanded)}  // 添加点击切换
+            style={{
+              backgroundColor: '#f5f5f5',
+              padding: '8px 12px',
+              borderRadius: '15px',
+              maxWidth: '85%',
+              wordBreak: 'break-word',
+              boxShadow: '0 1px 2px rgba(0,0,0,0.1)',
+              fontSize: '1em',
+              lineHeight: '1.4',
+              color: '#666',
+              cursor: 'pointer',  // 添加指针样式
+              transition: 'all 0.2s ease'  // 添加过渡效果
+            }}
+          >
+            {isReasoningExpanded ? (
+              <ReactMarkdown
+                children={reasoningContent}
+                components={{
+                  pre: ({node, ...props}) => (
+                    <pre style={{
+                      backgroundColor: '#f8f9fa',
+                      padding: '8px',
+                      borderRadius: '4px',
+                      overflowX: 'auto',
+                      margin: '8px 0'
+                    }} {...props} />
+                  ),
+                  code: ({node, inline, ...props}) => (
+                    inline ? 
+                    <code style={{
+                      backgroundColor: '#f8f9fa',
+                      padding: '2px 4px',
+                      borderRadius: '3px',
+                      fontSize: '0.9em'
+                    }} {...props} /> :
+                    <code {...props} />
+                  )
+                }}
+              />
+            ) : (
+              <div style={{ 
+                display: 'flex', 
+                alignItems: 'center',
+                gap: '6px' 
+              }}>
+                {isStreaming ? (
+                  <>
+                    <svg 
+                      width="16" 
+                      height="16" 
+                      viewBox="0 0 24 24" 
+                      fill="none" 
+                      stroke="currentColor" 
+                      strokeWidth="2"
+                      style={{ animation: 'spin 2s linear infinite' }}
+                    >
+                      <circle cx="12" cy="12" r="10" />
+                      <path d="M12 6v6l4 2" />
+                    </svg>
+                    思考中...（点击展开）
+                  </>
+                ) : (
+                  <>
+                    <svg 
+                      width="16" 
+                      height="16" 
+                      viewBox="0 0 24 24" 
+                      fill="none" 
+                      stroke="currentColor" 
+                      strokeWidth="2"
+                    >
+                      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                      <polyline points="22 4 12 14.01 9 11.01" />
+                    </svg>
+                    思考完成（点击展开）
+                  </>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -124,7 +195,7 @@ const MessageBubble = ({ content, reasoningContent, isUser, onRetry, onCopy, onE
           ) : (
             <div style={{
               backgroundColor: isUser ? '#e3f2fd' : '#f5f5f5',
-              padding: '10px 15px',
+              padding: '8px 12px',  // 减小内边距
               borderRadius: '15px',
               maxWidth: '85%',
               wordBreak: 'break-word',
@@ -133,7 +204,32 @@ const MessageBubble = ({ content, reasoningContent, isUser, onRetry, onCopy, onE
               lineHeight: '1.4',
               position: 'relative'
             }}>
-              {content}
+              {isUser ? content : (
+                <ReactMarkdown
+                  children={content}
+                  components={{
+                    pre: ({node, ...props}) => (
+                      <pre style={{
+                        backgroundColor: '#f8f9fa',
+                        padding: '8px',
+                        borderRadius: '4px',
+                        overflowX: 'auto',
+                        margin: '8px 0'
+                      }} {...props} />
+                    ),
+                    code: ({node, inline, ...props}) => (
+                      inline ? 
+                      <code style={{
+                        backgroundColor: '#f8f9fa',
+                        padding: '2px 4px',
+                        borderRadius: '3px',
+                        fontSize: '0.9em'
+                      }} {...props} /> :
+                      <code {...props} />
+                    )
+                  }}
+                />
+              )}
               {isUser && showButtons && (
                 <div style={{
                   position: 'absolute',
@@ -620,7 +716,7 @@ function Chat() {
               };
               setDisplayMessages(prev => [...prev, finalMessage]);
               setRequestMessages(prev => [...prev, {
-                role: 'assistant',
+        role: 'assistant', 
                 content: responseText
               }]);
               setStreaming(false);
@@ -688,7 +784,7 @@ function Chat() {
         }}>
           对话轮次: {currentTurns}/{maxHistoryLength}
         </div>
-      </div>
+            </div>
       <div style={{ 
         marginBottom: '20px', 
         height: '500px',
@@ -713,6 +809,7 @@ function Chat() {
                 onRetry={!msg.isUser ? () => handleRetry(msg) : null}
                 onCopy={!msg.isUser ? () => handleCopy(msg.content) : () => handleCopy(msg.content)}
                 onEdit={msg.role === 'user' ? (newContent) => handleEdit(msg, newContent) : null}
+                isStreaming={streaming}
               />
             ))}
             {streaming && (
@@ -722,6 +819,7 @@ function Chat() {
                     content={null}
                     reasoningContent={reasoningText}
                     isUser={false}
+                    isStreaming={true}
                   />
                 )}
                 {currentResponse && !isReasoning && (
@@ -729,6 +827,7 @@ function Chat() {
                     content={currentResponse}
                     reasoningContent={null}
                     isUser={false}
+                    isStreaming={false}
                   />
                 )}
                 <div ref={messagesEndRef} style={{ height: '1px', margin: '0' }} />
@@ -778,11 +877,21 @@ function Chat() {
             }}
           >
             发送
-          </button>
+        </button>
         )}
       </form>
     </div>
   )
 }
+
+// 添加旋转动画样式
+const style = document.createElement('style');
+style.textContent = `
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+`;
+document.head.appendChild(style);
 
 export default Chat 
