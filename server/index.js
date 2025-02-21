@@ -12,23 +12,11 @@ const limiter = rateLimit({
   max: 100 // 限制每个IP 15分钟内最多100个请求
 });
 
-// 配置 CORS
+// 配置 CORS - 简单版本
 app.use(cors({
-  origin: function(origin, callback) {
-    const allowedOrigins = [
-      'http://localhost:5173',
-      'https://gencodebyai.github.io'
-    ];
-    
-    // 允许来自允许列表的请求
-    if (!origin || allowedOrigins.some(allowed => origin.startsWith(allowed))) {
-      callback(null, true);
-    } else {
-      callback(new Error('不允许的来源'));
-    }
-  },
+  origin: '*',  // 允许所有来源
   methods: ['GET', 'POST'],
-  credentials: true
+  credentials: false  // 关闭 credentials，因为使用 * 时不能为 true
 }));
 
 app.use(limiter);
@@ -212,6 +200,8 @@ app.post('/api/chat', async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server is running on port ${PORT}`);
+    console.log(`Local: http://localhost:${PORT}`);
+    console.log(`Network: http://192.168.1.6:${PORT}`);
 }); 

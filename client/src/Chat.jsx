@@ -8,7 +8,7 @@ const MessageBubble = ({ content, reasoningContent, isUser, onRetry, onCopy, onE
   const [showButtons, setShowButtons] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState(content);
-  const [isReasoningExpanded, setIsReasoningExpanded] = useState(false);  // 添加展开状态
+  const [isReasoningExpanded, setIsReasoningExpanded] = useState(true);  // 默认展开
 
   const handleEditSubmit = () => {
     onEdit(editContent);
@@ -25,7 +25,7 @@ const MessageBubble = ({ content, reasoningContent, isUser, onRetry, onCopy, onE
           width: '100%'
         }}>
           <div 
-            onClick={() => setIsReasoningExpanded(!isReasoningExpanded)}  // 添加点击切换
+            onClick={() => setIsReasoningExpanded(!isReasoningExpanded)}
             style={{
               backgroundColor: '#f5f5f5',
               padding: '8px 12px',
@@ -36,35 +36,78 @@ const MessageBubble = ({ content, reasoningContent, isUser, onRetry, onCopy, onE
               fontSize: '1em',
               lineHeight: '1.4',
               color: '#666',
-              cursor: 'pointer',  // 添加指针样式
-              transition: 'all 0.2s ease'  // 添加过渡效果
+              cursor: 'pointer',
+              transition: 'all 0.2s ease'
             }}
           >
             {isReasoningExpanded ? (
-              <ReactMarkdown
-                children={reasoningContent}
-                components={{
-                  pre: ({node, ...props}) => (
-                    <pre style={{
-                      backgroundColor: '#f8f9fa',
-                      padding: '8px',
-                      borderRadius: '4px',
-                      overflowX: 'auto',
-                      margin: '8px 0'
-                    }} {...props} />
-                  ),
-                  code: ({node, inline, ...props}) => (
-                    inline ? 
-                    <code style={{
-                      backgroundColor: '#f8f9fa',
-                      padding: '2px 4px',
-                      borderRadius: '3px',
-                      fontSize: '0.9em'
-                    }} {...props} /> :
-                    <code {...props} />
-                  )
-                }}
-              />
+              <>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  marginBottom: '8px',
+                  opacity: 0.7,
+                  fontSize: '0.9em'
+                }}>
+                  {isStreaming ? (
+                    <>
+                      <svg 
+                        width="16" 
+                        height="16" 
+                        viewBox="0 0 24 24" 
+                        fill="none" 
+                        stroke="currentColor" 
+                        strokeWidth="2"
+                        style={{ animation: 'spin 2s linear infinite' }}
+                      >
+                        <circle cx="12" cy="12" r="10" />
+                        <path d="M12 6v6l4 2" />
+                      </svg>
+                      思考中...（点击收起）
+                    </>
+                  ) : (
+                    <>
+                      <svg 
+                        width="16" 
+                        height="16" 
+                        viewBox="0 0 24 24" 
+                        fill="none" 
+                        stroke="currentColor" 
+                        strokeWidth="2"
+                      >
+                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                        <polyline points="22 4 12 14.01 9 11.01" />
+                      </svg>
+                      思考完成（点击收起）
+                    </>
+                  )}
+                </div>
+                <ReactMarkdown
+                  children={reasoningContent}
+                  components={{
+                    pre: ({node, ...props}) => (
+                      <pre style={{
+                        backgroundColor: '#f8f9fa',
+                        padding: '8px',
+                        borderRadius: '4px',
+                        overflowX: 'auto',
+                        margin: '8px 0'
+                      }} {...props} />
+                    ),
+                    code: ({node, inline, ...props}) => (
+                      inline ? 
+                      <code style={{
+                        backgroundColor: '#f8f9fa',
+                        padding: '2px 4px',
+                        borderRadius: '3px',
+                        fontSize: '0.9em'
+                      }} {...props} /> :
+                      <code {...props} />
+                    )
+                  }}
+                />
+              </>
             ) : (
               <div style={{ 
                 display: 'flex', 
@@ -112,13 +155,75 @@ const MessageBubble = ({ content, reasoningContent, isUser, onRetry, onCopy, onE
         <div style={{ 
           margin: '10px', 
           display: 'flex',
-          flexDirection: 'column',
-          alignItems: isUser ? 'flex-end' : 'flex-start',
-          width: '100%'
-        }}
-        onMouseEnter={() => isUser && setShowButtons(true)}
-        onMouseLeave={() => isUser && setShowButtons(false)}
-        >
+          flexDirection: 'row',
+          alignItems: 'flex-end',
+          justifyContent: isUser ? 'flex-end' : 'flex-start',
+          width: '100%',
+          gap: '8px'
+        }}>
+          {/* 用户消息的操作按钮 */}
+          {isUser && !isEditing && (
+            <div style={{
+              display: 'flex',
+              gap: '8px',
+              alignSelf: 'flex-end',
+              paddingBottom: '4px'
+            }}>
+              <button
+                onClick={() => {
+                  if (onCopy) {
+                    onCopy(content);
+                  }
+                }}
+                style={{
+                  border: 'none',
+                  background: 'none',
+                  color: '#666',
+                  fontSize: '12px',
+                  cursor: 'pointer',
+                  padding: '4px 8px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  opacity: 0.7,
+                  transition: 'opacity 0.2s'
+                }}
+                onMouseEnter={e => e.target.style.opacity = 1}
+                onMouseLeave={e => e.target.style.opacity = 0.7}
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h6a2 2 0 012 2v8a2 2 0 01-2 2h-2"/>
+                </svg>
+                复制
+              </button>
+              <button
+                onClick={() => setIsEditing(true)}
+                style={{
+                  border: 'none',
+                  background: 'none',
+                  color: '#666',
+                  fontSize: '12px',
+                  cursor: 'pointer',
+                  padding: '4px 8px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  opacity: 0.7,
+                  transition: 'opacity 0.2s'
+                }}
+                onMouseEnter={e => e.target.style.opacity = 1}
+                onMouseLeave={e => e.target.style.opacity = 0.7}
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
+                  <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                </svg>
+                修改
+              </button>
+            </div>
+          )}
+
+          {/* 消息内容 - 添加编辑模式 */}
           {isEditing ? (
             <div style={{
               display: 'flex',
@@ -126,66 +231,61 @@ const MessageBubble = ({ content, reasoningContent, isUser, onRetry, onCopy, onE
               gap: '8px',
               maxWidth: '85%',
               width: '500px',
-              alignSelf: 'center'
+              margin: '0 auto'  // 居中显示
             }}>
               <textarea
                 value={editContent}
                 onChange={(e) => setEditContent(e.target.value)}
                 style={{
-                  padding: '10px',
-                  borderRadius: '15px',
-                  border: '1px solid #ccc',
-                  minHeight: '80px',
+                  padding: '12px',
+                  borderRadius: '8px',
+                  border: '1px solid #e0e0e0',
+                  minHeight: '100px',
                   width: '100%',
                   resize: 'vertical',
-                  fontSize: '1em',
-                  lineHeight: '1.4',
+                  fontSize: '14px',
+                  lineHeight: '1.5',
                   outline: 'none',
-                  boxShadow: '0 1px 2px rgba(0,0,0,0.1)',
-                  transition: 'border-color 0.2s',
-                  ':focus': {
-                    borderColor: '#1976d2'
-                  }
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
+                  transition: 'border-color 0.2s'
                 }}
                 autoFocus
               />
               <div style={{ 
                 display: 'flex', 
                 gap: '8px', 
-                justifyContent: 'flex-end',
-                marginTop: '4px'
+                justifyContent: 'flex-end'
               }}>
                 <button
-                  onClick={() => setIsEditing(false)}
+                  onClick={() => {
+                    setIsEditing(false);
+                    setEditContent(content);  // 重置为原始内容
+                  }}
                   style={{
-                    padding: '6px 12px',
-                    border: '1px solid #ccc',
+                    padding: '8px 16px',
+                    border: '1px solid #e0e0e0',
                     borderRadius: '6px',
-                    background: 'white',
+                    background: '#fff',
                     cursor: 'pointer',
                     fontSize: '14px',
-                    transition: 'all 0.2s',
-                    ':hover': {
-                      backgroundColor: '#f5f5f5'
-                    }
+                    color: '#666'
                   }}
                 >
                   取消
                 </button>
                 <button
-                  onClick={handleEditSubmit}
+                  onClick={() => {
+                    onEdit(editContent);
+                    setIsEditing(false);
+                  }}
                   style={{
-                    padding: '6px 12px',
+                    padding: '8px 16px',
                     border: 'none',
                     borderRadius: '6px',
                     background: '#1976d2',
-                    color: 'white',
+                    color: '#fff',
                     cursor: 'pointer',
-                    fontSize: '14px',
-                    transition: 'all 0.2s',
-                    ':hover': {
-                      backgroundColor: '#1565c0'
-                    }
+                    fontSize: '14px'
                   }}
                 >
                   提交
@@ -195,14 +295,13 @@ const MessageBubble = ({ content, reasoningContent, isUser, onRetry, onCopy, onE
           ) : (
             <div style={{
               backgroundColor: isUser ? '#e3f2fd' : '#f5f5f5',
-              padding: '8px 12px',  // 减小内边距
+              padding: '8px 12px',
               borderRadius: '15px',
               maxWidth: '85%',
               wordBreak: 'break-word',
               boxShadow: '0 1px 2px rgba(0,0,0,0.1)',
               fontSize: '1em',
-              lineHeight: '1.4',
-              position: 'relative'
+              lineHeight: '1.4'
             }}>
               {isUser ? content : (
                 <ReactMarkdown
@@ -230,55 +329,23 @@ const MessageBubble = ({ content, reasoningContent, isUser, onRetry, onCopy, onE
                   }}
                 />
               )}
-              {isUser && showButtons && (
-                <div style={{
-                  position: 'absolute',
-                  top: '-20px',
-                  right: '0',
-                  display: 'flex',
-                  gap: '8px'
-                }}>
-                  <button
-                    onClick={() => onCopy?.(content)}
-                    style={{
-                      border: 'none',
-                      background: 'none',
-                      color: '#666',
-                      fontSize: '12px',
-                      cursor: 'pointer',
-                      padding: '2px 4px',
-                      opacity: 0.7
-                    }}
-                  >
-                    复制
-                  </button>
-                  <button
-                    onClick={() => setIsEditing(true)}
-                    style={{
-                      border: 'none',
-                      background: 'none',
-                      color: '#666',
-                      fontSize: '12px',
-                      cursor: 'pointer',
-                      padding: '2px 4px',
-                      opacity: 0.7
-                    }}
-                  >
-                    修改
-                  </button>
-                </div>
-              )}
             </div>
           )}
+
+          {/* AI 消息的操作按钮 */}
           {!isUser && (
             <div style={{
               display: 'flex',
               gap: '8px',
-              marginTop: '4px',
-              marginLeft: '15px'
+              alignSelf: 'flex-end',  // 确保按钮与消息底部对齐
+              paddingBottom: '4px'  // 微调底部对齐位置
             }}>
               <button
-                onClick={() => onCopy?.(content)}
+                onClick={() => {
+                  if (onCopy) {
+                    onCopy(content);
+                  }
+                }}
                 style={{
                   border: 'none',
                   background: 'none',
@@ -319,7 +386,7 @@ const MessageBubble = ({ content, reasoningContent, isUser, onRetry, onCopy, onE
                 onMouseLeave={e => e.target.style.opacity = 0.7}
               >
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c-4.97 0-9-4.03-9-9m9 9a9 9 0 009-9"/>
+                  <path d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c-4.97 0-9-4.03-9-9m9 9a9 0 009-9"/>
                 </svg>
                 重试
               </button>
@@ -346,19 +413,90 @@ function Chat() {
   const [reasoningText, setReasoningText] = useState('')
   const [isReasoning, setIsReasoning] = useState(true)
   const [abortController, setAbortController] = useState(null);  // 添加用于停止请求的控制器
+  const [userHasScrolled, setUserHasScrolled] = useState(false);  // 添加用户滚动标记
+  const lastUserInteraction = useRef(Date.now());  // 记录最后用户交互时间
+  const chatContainerRef = useRef(null);
+  const isNearBottom = useRef(true);  // 添加这个来跟踪是否在底部
+  const [autoScroll, setAutoScroll] = useState(true);  // 添加自动滚动控制
+  const lastScrollPosition = useRef(0);  // 记录最后的滚动位置
+  const [isSidebarExpanded, setIsSidebarExpanded] = useState(true);
+  const [conversations, setConversations] = useState(() => {
+    const saved = localStorage.getItem('chatHistory');
+    return saved ? JSON.parse(saved) : [
+      { 
+        id: 'current', 
+        title: '新对话', 
+        active: true, 
+        messages: [{ role: "system", content: "You are a helpful assistant." }],
+        timestamp: Date.now()
+      }
+    ];
+  });
 
-  const scrollToBottom = () => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ 
-        behavior: "smooth",
-        block: "end"
-      });
+  // 修改滚动到底部的函数
+  const scrollToBottom = (force = false) => {
+    if (!chatContainerRef.current) return;
+
+    const { scrollHeight, clientHeight } = chatContainerRef.current;
+    const shouldScroll = force || 
+      (!userHasScrolled && Date.now() - lastUserInteraction.current > 2000);
+
+    if (shouldScroll) {
+      chatContainerRef.current.scrollTop = scrollHeight - clientHeight;
     }
-  }
+  };
 
+  // 修改 updateState 函数，在每次更新时触发滚动
+  const updateState = (newReasoningText, newResponseText, isReasoning) => {
+    requestAnimationFrame(() => {
+      if (isReasoning) {
+        setReasoningText(newReasoningText);
+      } else {
+        setCurrentResponse(newResponseText);
+      }
+      // 每次更新内容后立即滚动
+      scrollToBottom();
+    });
+  };
+
+  // 修改滚动事件处理函数
+  const handleScroll = (e) => {
+    const { scrollTop, scrollHeight, clientHeight } = e.target;
+    const distanceFromBottom = scrollHeight - clientHeight - scrollTop;
+    
+    // 只在用户主动滚动时更新状态
+    if (Math.abs(scrollTop - lastScrollPosition.current) > 30) {
+      lastUserInteraction.current = Date.now();
+      setUserHasScrolled(true);
+      lastScrollPosition.current = scrollTop;
+    }
+
+    // 如果接近底部，重置用户滚动标记
+    if (distanceFromBottom < 100) {
+      setUserHasScrolled(false);
+    }
+  };
+
+  // 修改消息更新的处理
   useEffect(() => {
-    scrollToBottom()
-  }, [displayMessages, currentResponse, reasoningText])
+    if (streaming) {
+      scrollToBottom();
+    }
+  }, [currentResponse, reasoningText, streaming]);
+
+  // 新消息添加时的处理
+  useEffect(() => {
+    if (!streaming) {
+      scrollToBottom(true);  // 新消息时强制滚动
+      setUserHasScrolled(false);  // 重置用户滚动状态
+    }
+  }, [displayMessages.length]);
+
+  // 修改输入框焦点处理
+  const handleInputFocus = () => {
+    setUserHasScrolled(false);
+    scrollToBottom(true);
+  };
 
   // 计算当前对话轮次
   const getCurrentTurns = (msgs) => {
@@ -396,37 +534,38 @@ function Chat() {
     let updatedDisplayMessages = [...displayMessages, newMessage]
     let updatedRequestMessages = [...requestMessages, newMessage]
     
-    // 保持系统消息，并限制历史消息数量
-    const currentTurns = getCurrentTurns(updatedRequestMessages)
-    
-    if (currentTurns > maxHistoryLength) {
-      const systemMessage = updatedRequestMessages[0]
-      const recentMessages = []
-      let turns = 0
-      
-      for (let i = updatedRequestMessages.length - 1; i > 0; i--) {
-        recentMessages.unshift(updatedRequestMessages[i])
-        if (updatedRequestMessages[i].role === 'user') {
-          turns++
-          if (turns === maxHistoryLength) break
-        }
+    // 更新当前对话的历史记录
+    const updatedConversations = conversations.map(conv => {
+      if (conv.active) {
+        // 只在第一条用户消息时更新标题
+        const userMessages = conv.messages.filter(msg => msg.role === 'user');
+        const isFirstUserMessage = userMessages.length === 0;
+        const title = isFirstUserMessage ? input.slice(0, 30) : conv.title;
+        return {
+          ...conv,
+          title,
+          messages: updatedDisplayMessages,
+          timestamp: Date.now()
+        };
       }
-      
-      updatedRequestMessages = [systemMessage, ...recentMessages]
-      // 显示消息保持完整历史
-      updatedDisplayMessages = [...displayMessages, newMessage]
-    }
-    
-    setDisplayMessages(updatedDisplayMessages)
-    setRequestMessages(updatedRequestMessages)
-    setInput('')
-    setStreaming(true)
-    setCurrentResponse('')
-    setReasoningText('')
-    setIsReasoning(true)
+      return conv;
+    });
+
+    // 先更新状态和本地存储
+    setDisplayMessages(updatedDisplayMessages);
+    setRequestMessages(updatedRequestMessages);
+    localStorage.setItem('chatHistory', JSON.stringify(updatedConversations));  // 直接保存到 localStorage
+    setConversations(updatedConversations);  // 更新状态
+    setInput('');
+
+    // 开始流式响应
+    setStreaming(true);
+    setCurrentResponse('');
+    setReasoningText('');
+    setIsReasoning(true);
 
     try {
-      const controller = new AbortController();  // 创建新的 AbortController
+      const controller = new AbortController();
       setAbortController(controller);
 
       const response = await fetch(`${serverURL}/api/chat`, {
@@ -435,76 +574,13 @@ function Chat() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          messages: updatedRequestMessages,
+          messages: updatedRequestMessages,  // 使用更新后的消息
           model: selectedModel
         }),
-        signal: controller.signal  // 添加 signal
-      })
+        signal: controller.signal
+      });
 
-      const reader = response.body.getReader()
-      const decoder = new TextDecoder()
-      let responseText = ''
-      let reasoningText = ''
-      let currentIsReasoning = true
-
-      // 使用 requestAnimationFrame 来优化更新
-      const updateState = (newReasoningText, newResponseText, isReasoning) => {
-        requestAnimationFrame(() => {
-          if (isReasoning) {
-            setReasoningText(newReasoningText)
-          } else {
-            setCurrentResponse(newResponseText)
-          }
-        })
-      }
-
-      while (true) {
-        const { value, done } = await reader.read()
-        if (done) break
-
-        const chunk = decoder.decode(value)
-        const lines = chunk.split('\n')
-        
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const data = line.slice(5).trim()
-            if (data === '[DONE]') {
-              const finalMessage = {
-                role: 'assistant',
-                content: responseText,
-                reasoning_content: reasoningText
-              }
-              setDisplayMessages(prev => [...prev, finalMessage])
-              setRequestMessages(prev => [...prev, {
-                role: 'assistant',
-                content: responseText
-              }])
-              setStreaming(false)
-              return
-            }
-
-            try {
-              const parsed = JSON.parse(data)
-              const content = parsed.choices[0]?.delta?.content
-              const reasoningContent = parsed.choices[0]?.delta?.reasoning_content
-
-              if (reasoningContent) {
-                reasoningText += reasoningContent
-                updateState(reasoningText, '', true)
-              } else if (content) {
-                if (currentIsReasoning) {
-                  currentIsReasoning = false
-                  setIsReasoning(false)
-                }
-                responseText += content
-                updateState('', responseText, false)
-              }
-            } catch (e) {
-              console.error('解析响应出错:', e)
-            }
-          }
-        }
-      }
+      await handleStreamResponse(response, updatedDisplayMessages);  // 传入更新后的消息列表
     } catch (error) {
       if (error.name === 'AbortError') {
         console.log('请求被中止');
@@ -523,21 +599,97 @@ function Chat() {
     }
   }
 
-  // 添加重试函数
+  // 修改 handleStreamResponse 函数
+  const handleStreamResponse = async (response, currentMessages) => {
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let responseText = '';
+    let reasoningText = '';
+    let currentIsReasoning = true;
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+
+      const chunk = decoder.decode(value);
+      const lines = chunk.split('\n');
+      
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          const data = line.slice(5).trim();
+          if (data === '[DONE]') {
+            const finalMessage = {
+              role: 'assistant',
+              content: responseText,
+              reasoning_content: reasoningText
+            };
+            const newDisplayMessages = [...currentMessages, finalMessage];
+            
+            // 更新对话历史，保持当前对话的所有信息
+            const updatedConversations = conversations.map(conv => {
+              if (conv.active) {
+                return {
+                  ...conv,  // 保持所有现有属性
+                  messages: newDisplayMessages,
+                  timestamp: Date.now()
+                };
+              }
+              return conv;
+            });
+
+            // 更新状态
+            setDisplayMessages(newDisplayMessages);
+            setRequestMessages([...requestMessages, {
+              role: 'assistant',
+              content: responseText
+            }]);
+            localStorage.setItem('chatHistory', JSON.stringify(updatedConversations));  // 直接保存到 localStorage
+            setConversations(updatedConversations);  // 更新状态
+            setStreaming(false);
+            return;
+          }
+
+          try {
+            const parsed = JSON.parse(data);
+            const content = parsed.choices[0]?.delta?.content;
+            const reasoningContent = parsed.choices[0]?.delta?.reasoning_content;
+
+            if (reasoningContent) {
+              reasoningText += reasoningContent;
+              updateState(reasoningText, '', true);
+            } else if (content) {
+              // 如果是第一个内容标记，说明推理已完成
+              if (currentIsReasoning) {
+                currentIsReasoning = false;
+                setIsReasoning(false);
+              }
+              responseText += content;
+              // 传递 reasoningCompleted 给 MessageBubble
+              updateState(reasoningText, responseText, false);
+            }
+          } catch (e) {
+            console.error('解析响应出错:', e);
+          }
+        }
+      }
+    }
+  };
+
+  // 修改重试函数
   const handleRetry = async (message) => {
     // 找到当前消息的索引
     const messageIndex = displayMessages.findIndex(msg => msg === message);
-    // 获取到当前消息之前的所有消息（包括当前消息的上一条用户消息）
-    const userMessageIndex = messageIndex - 1;
+    // 获取到当前消息之前的所有消息
+    const previousMessages = displayMessages.slice(0, messageIndex);
     // 过滤掉 reasoning_content 字段
-    const previousMessages = displayMessages.slice(0, messageIndex).map(msg => ({
+    const requestMsgs = previousMessages.map(msg => ({
       role: msg.role,
       content: msg.content
     }));
     
     // 更新消息列表，移除当前的 AI 回答
-    setDisplayMessages(displayMessages.slice(0, messageIndex));
-    setRequestMessages(previousMessages);
+    setDisplayMessages(previousMessages);
+    setRequestMessages(requestMsgs);
     
     // 重新发送请求
     setStreaming(true);
@@ -552,75 +704,13 @@ function Chat() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          messages: previousMessages,  // 已经过滤掉 reasoning_content 字段
+          messages: requestMsgs,
           model: selectedModel
         })
       });
 
-      const reader = response.body.getReader()
-      const decoder = new TextDecoder()
-      let responseText = ''
-      let reasoningText = ''
-      let currentIsReasoning = true
-
-      // 使用 requestAnimationFrame 来优化更新
-      const updateState = (newReasoningText, newResponseText, isReasoning) => {
-        requestAnimationFrame(() => {
-          if (isReasoning) {
-            setReasoningText(newReasoningText)
-          } else {
-            setCurrentResponse(newResponseText)
-          }
-        })
-      }
-
-      while (true) {
-        const { value, done } = await reader.read()
-        if (done) break
-
-        const chunk = decoder.decode(value)
-        const lines = chunk.split('\n')
-        
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const data = line.slice(5).trim()
-            if (data === '[DONE]') {
-              const finalMessage = {
-                role: 'assistant',
-                content: responseText,
-                reasoning_content: reasoningText
-              }
-              setDisplayMessages(prev => [...prev, finalMessage])
-              setRequestMessages(prev => [...prev, {
-                role: 'assistant',
-                content: responseText
-              }])
-              setStreaming(false)
-              return
-            }
-
-            try {
-              const parsed = JSON.parse(data)
-              const content = parsed.choices[0]?.delta?.content
-              const reasoningContent = parsed.choices[0]?.delta?.reasoning_content
-
-              if (reasoningContent) {
-                reasoningText += reasoningContent
-                updateState(reasoningText, '', true)
-              } else if (content) {
-                if (currentIsReasoning) {
-                  currentIsReasoning = false
-                  setIsReasoning(false)
-                }
-                responseText += content
-                updateState('', responseText, false)
-              }
-            } catch (e) {
-              console.error('解析响应出错:', e)
-            }
-          }
-        }
-      }
+      // 传入当前消息列表
+      await handleStreamResponse(response, previousMessages);
     } catch (error) {
       console.error('重试失败:', error)
       setStreaming(false)
@@ -631,20 +721,40 @@ function Chat() {
       setDisplayMessages(prev => [...prev, errorMessage])
       setRequestMessages(prev => [...prev, errorMessage])
     }
-  }
+  };
 
   const currentTurns = getCurrentTurns(requestMessages)
 
-  // 添加复制函数
+  // 修改 handleCopy 函数
   const handleCopy = async (text) => {
     try {
-      await navigator.clipboard.writeText(text);
+      // 创建一个临时文本区域
+      const textArea = document.createElement('textarea');
+      textArea.value = text;
+      
+      // 将文本区域添加到文档中
+      document.body.appendChild(textArea);
+      
+      // 选择文本
+      textArea.select();
+      
+      try {
+        // 尝试使用新 API
+        await navigator.clipboard.writeText(text);
+      } catch {
+        // 如果新 API 失败，使用传统方法
+        document.execCommand('copy');
+      }
+      
+      // 移除临时文本区域
+      document.body.removeChild(textArea);
+      
     } catch (err) {
       console.error('复制失败:', err);
     }
   };
 
-  // 添加编辑处理函数
+  // 修改编辑处理函数
   const handleEdit = async (message, newContent) => {
     // 找到要编辑的消息之前的所有消息
     const messageIndex = displayMessages.findIndex(msg => msg === message);
@@ -654,7 +764,8 @@ function Chat() {
     const editedMessage = { role: 'user', content: newContent };
     
     // 更新消息列表
-    setDisplayMessages([...previousMessages, editedMessage]);
+    const updatedMessages = [...previousMessages, editedMessage];
+    setDisplayMessages(updatedMessages);
     setRequestMessages([...previousMessages.map(msg => ({
       role: msg.role,
       content: msg.content
@@ -681,75 +792,13 @@ function Chat() {
         })
       });
 
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let responseText = '';
-      let reasoningText = '';
-      let currentIsReasoning = true;
-
-      // 使用 requestAnimationFrame 来优化更新
-      const updateState = (newReasoningText, newResponseText, isReasoning) => {
-        requestAnimationFrame(() => {
-          if (isReasoning) {
-            setReasoningText(newReasoningText);
-          } else {
-            setCurrentResponse(newResponseText);
-          }
-        });
-      };
-
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-
-        const chunk = decoder.decode(value);
-        const lines = chunk.split('\n');
-        
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const data = line.slice(5).trim();
-            if (data === '[DONE]') {
-              const finalMessage = {
-                role: 'assistant',
-                content: responseText,
-                reasoning_content: reasoningText
-              };
-              setDisplayMessages(prev => [...prev, finalMessage]);
-              setRequestMessages(prev => [...prev, {
-        role: 'assistant', 
-                content: responseText
-              }]);
-              setStreaming(false);
-              return;
-            }
-
-            try {
-              const parsed = JSON.parse(data);
-              const content = parsed.choices[0]?.delta?.content;
-              const reasoningContent = parsed.choices[0]?.delta?.reasoning_content;
-
-              if (reasoningContent) {
-                reasoningText += reasoningContent;
-                updateState(reasoningText, '', true);
-              } else if (content) {
-                if (currentIsReasoning) {
-                  currentIsReasoning = false;
-                  setIsReasoning(false);
-                }
-                responseText += content;
-                updateState('', responseText, false);
-              }
-            } catch (e) {
-              console.error('解析响应出错:', e);
-            }
-          }
-        }
-      }
+      // 传入更新后的消息列表
+      await handleStreamResponse(response, updatedMessages);
     } catch (error) {
       console.error('编辑请求失败:', error);
       setStreaming(false);
       const errorMessage = {
-        role: 'assistant',
+        role: 'assistant', 
         content: '编辑请求失败：' + error.message
       };
       setDisplayMessages(prev => [...prev, errorMessage]);
@@ -757,131 +806,399 @@ function Chat() {
     }
   };
 
+  // 修改点击历史对话的处理函数
+  const handleConversationClick = (conv) => {
+    const updatedConversations = conversations.map(c => ({
+      ...c,
+      active: c.id === conv.id
+    }));
+    localStorage.setItem('chatHistory', JSON.stringify(updatedConversations));
+    setConversations(updatedConversations);
+    
+    // 重置当前状态
+    setCurrentResponse('');
+    setReasoningText('');
+    setStreaming(false);
+    
+    // 设置消息
+    const messages = conv.messages || [{ role: "system", content: "You are a helpful assistant." }];
+    setDisplayMessages(messages);
+    setRequestMessages(messages.map(msg => ({
+      role: msg.role,
+      content: msg.content
+    })));
+
+    // 直接设置滚动位置
+    if (chatContainerRef.current) {
+      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+    }
+  };
+
+  // 修改新对话按钮的处理
+  const handleNewChat = () => {
+    const newConversation = {
+      id: Date.now().toString(),
+      title: '新对话',
+      active: true,
+      messages: [{ role: "system", content: "You are a helpful assistant." }],
+      timestamp: Date.now()
+    };
+    
+    const updatedConversations = conversations.map(conv => ({
+      ...conv,  // 保持所有现有属性
+      active: false
+    }));
+    
+    localStorage.setItem('chatHistory', JSON.stringify([newConversation, ...updatedConversations]));  // 直接保存到 localStorage
+    setConversations([newConversation, ...updatedConversations]);  // 更新状态
+    setDisplayMessages(newConversation.messages);
+    setRequestMessages(newConversation.messages);
+    setCurrentResponse('');
+    setReasoningText('');
+  };
+
   return (
-    <div style={{ maxWidth: '800px', margin: '0 auto', padding: '20px' }}>
-      <h1>Mini Chatbot</h1>
-      <div style={{ 
-        marginBottom: '10px', 
+    <div style={{ 
+      display: 'flex',
+      height: '100vh',
+      overflow: 'hidden'
+    }}>
+      {/* 左边栏 */}
+      <div style={{
+        width: isSidebarExpanded ? '300px' : '50px',
+        borderRight: '1px solid #e0e0e0',
+        backgroundColor: '#fff',
+        transition: 'width 0.3s ease',
         display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center'
+        flexDirection: 'column',
+        position: 'relative'
       }}>
-        <select 
-          value={selectedModel}
-          onChange={(e) => setSelectedModel(e.target.value)}
+        {/* 收缩按钮 - 移到中间右侧 */}
+                <button 
+          onClick={() => setIsSidebarExpanded(!isSidebarExpanded)}
           style={{
-            padding: '5px',
-            borderRadius: '4px',
-            border: '1px solid #ccc'
+            position: 'absolute',
+            right: '-12px',  // 调整到右侧
+            top: '50%',      // 垂直居中
+            transform: 'translateY(-50%)',  // 确保完全居中
+            width: '24px',
+            height: '24px',
+            border: '1px solid #e0e0e0',
+            borderRadius: '50%',
+            background: '#fff',
+            cursor: 'pointer',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            zIndex: 10,
+            boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
           }}
         >
-          {modelOptions.map(model => (
-            <option key={model} value={model}>{model}</option>
-          ))}
-        </select>
-        <div style={{ 
-          color: currentTurns >= maxHistoryLength ? '#ff4444' : '#666'
+          <svg 
+            width="14" 
+            height="14" 
+            viewBox="0 0 24 24" 
+            fill="none" 
+            stroke="currentColor" 
+            strokeWidth="2"
+            style={{
+              transform: isSidebarExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
+              transition: 'transform 0.3s ease'
+            }}
+          >
+            <path d="M9 18l6-6-6-6"/>
+          </svg>
+                </button>
+
+        {/* 标题区域 - 移除展开按钮 */}
+        <div style={{
+          padding: '20px 15px',
+          borderBottom: '1px solid #e0e0e0',
+          textAlign: 'center'
         }}>
-          对话轮次: {currentTurns}/{maxHistoryLength}
+          {isSidebarExpanded ? (
+            <h1 style={{ 
+              margin: 0,
+              fontSize: '24px',
+              color: '#2c3e50'
+            }}>Mini Chatbot</h1>
+          ) : (
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
+            </svg>
+          )}
         </div>
+
+        {/* 新对话按钮 - 收缩时只显示图标 */}
+        <button
+          onClick={handleNewChat}
+          style={{
+            margin: '15px',
+            padding: '10px',
+            border: '1px solid #e0e0e0',
+            borderRadius: '8px',
+            background: '#f8f9fa',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: isSidebarExpanded ? 'flex-start' : 'center',
+            gap: '8px',
+            transition: 'all 0.2s'
+          }}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M12 5v14M5 12h14"/>
+          </svg>
+          {isSidebarExpanded && '新对话'}
+        </button>
+
+        {/* 对话历史列表 - 收缩时只显示图标 */}
+        <div style={{
+          flex: 1,
+          overflow: 'auto',
+          padding: '0 15px'
+        }}>
+          {conversations.map(conv => (
+            <div
+              key={conv.id}
+              onClick={() => handleConversationClick(conv)}
+              style={{
+                padding: '10px',
+                marginBottom: '8px',
+                borderRadius: '8px',
+                backgroundColor: conv.active ? '#e3f2fd' : 'transparent',
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: isSidebarExpanded ? 'flex-start' : 'center',
+                gap: '8px',
+                fontSize: '14px',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis'
+              }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
+              </svg>
+              {isSidebarExpanded && (conv.title || '新对话')}
             </div>
+          ))}
+        </div>
+      </div>
+
+      {/* 主聊天区域 */}
       <div style={{ 
-        marginBottom: '20px', 
-        height: '500px',
-        border: '1px solid #ccc', 
-        borderRadius: '5px',
-        overflow: 'auto',
-        padding: '10px',
-        scrollBehavior: 'smooth'
-      }} id="chat-container">
-        {displayMessages.length === 1 ? (
-          <div style={{ textAlign: 'center', color: '#666', marginTop: '220px' }}>
-            开始对话吧...
+        flex: 1,
+        padding: '20px',
+        transition: 'margin-left 0.3s ease',
+        display: 'flex',  // 添加 flex 布局
+        flexDirection: 'column',  // 垂直排列
+        height: '100vh'  // 使用全屏高度
+      }}>
+        {/* 头部区域 */}
+        <div style={{
+          display: 'flex',
+          justifyContent: 'flex-end',
+          alignItems: 'center',
+          padding: '5px 0 15px',
+          gap: '20px',
+          flexShrink: 0  // 防止头部压缩
+        }}>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '20px'
+          }}>
+            <select 
+              value={selectedModel}
+              onChange={(e) => setSelectedModel(e.target.value)}
+              style={{
+                padding: '8px 12px',
+                borderRadius: '8px',
+                border: '1px solid #e0e0e0',
+                backgroundColor: '#fff',
+                fontSize: '14px',
+                color: '#2c3e50',
+                cursor: 'pointer',
+                outline: 'none'
+              }}
+            >
+              {modelOptions.map(model => (
+                <option key={model} value={model}>{model}</option>
+              ))}
+            </select>
+            
+            <div style={{ 
+              color: currentTurns >= maxHistoryLength ? '#ff4444' : '#666',
+              fontSize: '14px',
+              padding: '6px 12px',
+              backgroundColor: '#f5f5f5',
+              borderRadius: '6px'
+            }}>
+              对话轮次: {currentTurns}/{maxHistoryLength}
+            </div>
           </div>
-        ) : (
-          <>
-            {displayMessages.filter(msg => msg.role !== 'system').map((msg, index) => (
-              <MessageBubble 
-                key={index}
-                content={msg.content}
-                reasoningContent={msg.reasoning_content}
-                isUser={msg.role === 'user'}
-                onRetry={!msg.isUser ? () => handleRetry(msg) : null}
-                onCopy={!msg.isUser ? () => handleCopy(msg.content) : () => handleCopy(msg.content)}
-                onEdit={msg.role === 'user' ? (newContent) => handleEdit(msg, newContent) : null}
-                isStreaming={streaming}
-              />
-            ))}
-            {streaming && (
+        </div>
+
+        {/* 聊天区域和输入框容器 */}
+        <div style={{
+          flex: 1,  // 填充剩余空间
+          display: 'flex',
+          flexDirection: 'column',
+          border: '1px solid #e0e0e0',
+          borderRadius: '12px',
+          backgroundColor: '#fff',
+          boxShadow: '0 2px 12px rgba(0,0,0,0.05)',
+          overflow: 'hidden',
+          marginBottom: '20px'  // 距离底部留出空间
+        }}>
+          {/* 聊天区域 */}
+          <div 
+            ref={chatContainerRef}
+            onScroll={handleScroll}
+            style={{ 
+              flex: 1,
+              minHeight: '400px',
+              padding: '20px',
+              overflow: 'auto',
+              overscrollBehavior: 'contain'
+            }} 
+            id="chat-container"
+          >
+            {displayMessages.length === 1 ? (
+              <div style={{ 
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                height: '100%',
+                color: '#666',
+                gap: '12px'
+              }}>
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#666" strokeWidth="1.5">
+                  <circle cx="12" cy="12" r="10" />
+                  <path d="M8 12h8" />
+                  <path d="M12 8v8" />
+                </svg>
+                <span style={{ fontSize: '16px' }}>开始对话吧...</span>
+              </div>
+            ) : (
               <>
-                {reasoningText && (
+                {displayMessages.filter(msg => msg.role !== 'system').map((msg, index) => (
                   <MessageBubble 
-                    content={null}
-                    reasoningContent={reasoningText}
-                    isUser={false}
-                    isStreaming={true}
+                    key={index}
+                    content={msg.content}
+                    reasoningContent={msg.reasoning_content}
+                    isUser={msg.role === 'user'}
+                    onRetry={!msg.isUser ? () => handleRetry(msg) : null}
+                    onCopy={handleCopy}
+                    onEdit={msg.role === 'user' ? (newContent) => handleEdit(msg, newContent) : null}
+                    isStreaming={streaming}
                   />
+                ))}
+                {streaming && (
+                  <>
+                    {reasoningText && (
+                      <MessageBubble 
+                        content={null}
+                        reasoningContent={reasoningText}
+                        isUser={false}
+                        isStreaming={isReasoning}  // 使用 isReasoning 替代 true
+                      />
+                    )}
+                    {currentResponse && !isReasoning && (
+                      <MessageBubble 
+                        content={currentResponse}
+                        reasoningContent={null}
+                        isUser={false}
+                        isStreaming={false}
+                      />
+                    )}
+                    <div ref={messagesEndRef} style={{ height: '1px', margin: '0' }} />
+                  </>
                 )}
-                {currentResponse && !isReasoning && (
-                  <MessageBubble 
-                    content={currentResponse}
-                    reasoningContent={null}
-                    isUser={false}
-                    isStreaming={false}
-                  />
-                )}
-                <div ref={messagesEndRef} style={{ height: '1px', margin: '0' }} />
               </>
             )}
-          </>
-        )}
       </div>
-      <form onSubmit={handleSubmit} style={{ display: 'flex', gap: '10px' }}>
+      
+          {/* 输入区域 */}
+          <div style={{ 
+            borderTop: '1px solid #e0e0e0',
+            padding: '15px',  // 增加内边距
+            backgroundColor: '#f8f9fa'
+          }}>
+            <form 
+              onSubmit={handleSubmit} 
+              style={{ 
+                display: 'flex',
+                gap: '12px'
+              }}
+            >
         <input
-          type="text"
+                type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          style={{ 
-            flex: 1, 
-            padding: '10px',
-            borderRadius: '5px',
-            border: '1px solid #ccc'
-          }}
-          placeholder="输入消息..."
-        />
-        {streaming ? (
-          <button 
-            type="button" 
-            onClick={handleStop}
-            style={{ 
-              padding: '10px 20px',
-              backgroundColor: '#d32f2f',
-              color: 'white',
-              border: 'none',
-              borderRadius: '5px',
-              cursor: 'pointer'
-            }}
-          >
-            停止
-          </button>
-        ) : (
-          <button 
-            type="submit" 
-            style={{ 
-              padding: '10px 20px',
-              backgroundColor: '#1976d2',
-              color: 'white',
-              border: 'none',
-              borderRadius: '5px',
-              cursor: 'pointer'
-            }}
-          >
-            发送
+                onFocus={handleInputFocus}
+                style={{ 
+                  flex: 1, 
+                  padding: '12px 16px',
+                  borderRadius: '8px',
+                  border: '1px solid #e0e0e0',
+                  fontSize: '16px',
+                  outline: 'none',
+                  transition: 'border-color 0.2s',
+                  backgroundColor: '#fff'
+                }}
+                placeholder="输入消息..."
+              />
+              {streaming ? (
+                <button 
+                  type="button" 
+                  onClick={handleStop}
+                  style={{ 
+                    padding: '12px 24px',
+                    backgroundColor: '#ef5350',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    fontSize: '16px',
+                    transition: 'background-color 0.2s',
+                    ':hover': {
+                      backgroundColor: '#d32f2f'
+                    }
+                  }}
+                >
+                  停止
+                </button>
+              ) : (
+                <button 
+                  type="submit" 
+                  style={{ 
+                    padding: '12px 24px',
+                    backgroundColor: '#1976d2',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    fontSize: '16px',
+                    transition: 'background-color 0.2s',
+                    ':hover': {
+                      backgroundColor: '#1565c0'
+                    }
+                  }}
+                >
+                  发送
         </button>
-        )}
-      </form>
+              )}
+            </form>
+          </div>
+        </div>
+      </div>
     </div>
-  )
+  );
 }
 
 // 添加旋转动画样式
