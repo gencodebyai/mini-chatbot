@@ -399,12 +399,26 @@ const MessageBubble = ({ content, reasoningContent, isUser, onRetry, onCopy, onE
 };
 
 function Chat() {
-  const [displayMessages, setDisplayMessages] = useState([
-    { role: "system", content: "You are a helpful assistant." }
-  ])
-  const [requestMessages, setRequestMessages] = useState([
-    { role: "system", content: "You are a helpful assistant." }
-  ])
+  const [displayMessages, setDisplayMessages] = useState(() => {
+    const saved = localStorage.getItem('chatHistory');
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      const activeConversation = parsed.find(conv => conv.active);
+      return activeConversation?.messages || [{ role: "system", content: "You are a helpful assistant." }];
+    }
+    return [{ role: "system", content: "You are a helpful assistant." }];
+  });
+
+  const [requestMessages, setRequestMessages] = useState(() => {
+    const saved = localStorage.getItem('chatHistory');
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      const activeConversation = parsed.find(conv => conv.active);
+      return activeConversation?.messages || [{ role: "system", content: "You are a helpful assistant." }];
+    }
+    return [{ role: "system", content: "You are a helpful assistant." }];
+  });
+
   const [input, setInput] = useState('')
   const [selectedModel, setSelectedModel] = useState(modelOptions[0])
   const messagesEndRef = useRef(null)
@@ -422,15 +436,21 @@ function Chat() {
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(true);
   const [conversations, setConversations] = useState(() => {
     const saved = localStorage.getItem('chatHistory');
-    return saved ? JSON.parse(saved) : [
-      { 
-        id: 'current', 
-        title: '新对话', 
-        active: true, 
-        messages: [{ role: "system", content: "You are a helpful assistant." }],
-        timestamp: Date.now()
-      }
-    ];
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      // 确保每个对话都有正确的标题
+      return parsed.map(conv => ({
+        ...conv,
+        title: conv.messages?.find(msg => msg.role === 'user')?.content?.slice(0, 30) || '新对话'
+      }));
+    }
+    return [{ 
+      id: Date.now().toString(), 
+      title: '新对话', 
+      active: true, 
+      messages: [{ role: "system", content: "You are a helpful assistant." }],
+      timestamp: Date.now()
+    }];
   });
 
   // 修改滚动到底部的函数
@@ -534,16 +554,17 @@ function Chat() {
     let updatedDisplayMessages = [...displayMessages, newMessage]
     let updatedRequestMessages = [...requestMessages, newMessage]
     
-    // 更新当前对话的历史记录
+    // 更新当前对话的历史记录和标题
     const updatedConversations = conversations.map(conv => {
       if (conv.active) {
-        // 只在第一条用户消息时更新标题
+        // 如果是第一条用户消息，将其作为标题
         const userMessages = conv.messages.filter(msg => msg.role === 'user');
         const isFirstUserMessage = userMessages.length === 0;
-        const title = isFirstUserMessage ? input.slice(0, 30) : conv.title;
+        const newTitle = isFirstUserMessage ? input.slice(0, 30) : conv.title;
+        
         return {
           ...conv,
-          title,
+          title: newTitle,  // 立即更新标题
           messages: updatedDisplayMessages,
           timestamp: Date.now()
         };
@@ -551,11 +572,11 @@ function Chat() {
       return conv;
     });
 
-    // 先更新状态和本地存储
+    // 立即更新状态和本地存储
     setDisplayMessages(updatedDisplayMessages);
     setRequestMessages(updatedRequestMessages);
-    localStorage.setItem('chatHistory', JSON.stringify(updatedConversations));  // 直接保存到 localStorage
-    setConversations(updatedConversations);  // 更新状态
+    localStorage.setItem('chatHistory', JSON.stringify(updatedConversations));
+    setConversations(updatedConversations);  // 立即更新对话列表
     setInput('');
 
     // 开始流式响应
@@ -625,11 +646,18 @@ function Chat() {
             };
             const newDisplayMessages = [...currentMessages, finalMessage];
             
-            // 更新对话历史，保持当前对话的所有信息
+            // 更新对话历史，保持当前对话的所有属性（包括标题）
             const updatedConversations = conversations.map(conv => {
               if (conv.active) {
+                // 获取第一条用户消息作为标题（如果还没有标题）
+                const firstUserMessage = conv.messages.find(msg => msg.role === 'user');
+                const title = conv.title === '新对话' && firstUserMessage 
+                  ? firstUserMessage.content.slice(0, 30) 
+                  : conv.title;  // 保持现有标题
+                
                 return {
-                  ...conv,  // 保持所有现有属性
+                  ...conv,
+                  title,  // 保持或更新标题
                   messages: newDisplayMessages,
                   timestamp: Date.now()
                 };
@@ -637,14 +665,21 @@ function Chat() {
               return conv;
             });
 
-            // 更新状态
+            // 更新状态和本地存储
             setDisplayMessages(newDisplayMessages);
             setRequestMessages([...requestMessages, {
               role: 'assistant',
               content: responseText
             }]);
-            localStorage.setItem('chatHistory', JSON.stringify(updatedConversations));  // 直接保存到 localStorage
-            setConversations(updatedConversations);  // 更新状态
+            localStorage.setItem('chatHistory', JSON.stringify(updatedConversations));
+            
+            // 从本地存储重新加载对话列表
+            const saved = localStorage.getItem('chatHistory');
+            if (saved) {
+              const parsed = JSON.parse(saved);
+              setConversations(parsed);
+            }
+            
             setStreaming(false);
             return;
           }
@@ -838,23 +873,44 @@ function Chat() {
   const handleNewChat = () => {
     const newConversation = {
       id: Date.now().toString(),
-      title: '新对话',
+      title: '新对话',  // 初始标题
       active: true,
       messages: [{ role: "system", content: "You are a helpful assistant." }],
       timestamp: Date.now()
     };
     
     const updatedConversations = conversations.map(conv => ({
-      ...conv,  // 保持所有现有属性
+      ...conv,
       active: false
     }));
     
-    localStorage.setItem('chatHistory', JSON.stringify([newConversation, ...updatedConversations]));  // 直接保存到 localStorage
-    setConversations([newConversation, ...updatedConversations]);  // 更新状态
+    const newConversations = [newConversation, ...updatedConversations];
+    localStorage.setItem('chatHistory', JSON.stringify(newConversations));
+    setConversations(newConversations);
     setDisplayMessages(newConversation.messages);
     setRequestMessages(newConversation.messages);
     setCurrentResponse('');
     setReasoningText('');
+  };
+
+  // 添加清除所有对话的处理函数
+  const handleClearAll = () => {
+    if (window.confirm('确定要清除所有对话吗？')) {
+      const newConversation = {
+        id: Date.now().toString(),
+        title: '新对话',
+        active: true,
+        messages: [{ role: "system", content: "You are a helpful assistant." }],
+        timestamp: Date.now()
+      };
+      
+      localStorage.setItem('chatHistory', JSON.stringify([newConversation]));
+      setConversations([newConversation]);
+      setDisplayMessages(newConversation.messages);
+      setRequestMessages(newConversation.messages);
+      setCurrentResponse('');
+      setReasoningText('');
+    }
   };
 
   return (
@@ -914,41 +970,97 @@ function Chat() {
         <div style={{
           padding: '20px 15px',
           borderBottom: '1px solid #e0e0e0',
-          textAlign: 'center'
+          textAlign: 'center',
+          display: 'flex',  // 添加 flex 布局
+          alignItems: 'center',  // 垂直居中
+          justifyContent: isSidebarExpanded ? 'space-between' : 'center'  // 展开时两端对齐，收起时居中
         }}>
           {isSidebarExpanded ? (
-            <h1 style={{ 
-              margin: 0,
-              fontSize: '24px',
-              color: '#2c3e50'
-            }}>Mini Chatbot</h1>
+            <>
+              <h1 style={{ 
+                margin: 0,
+                fontSize: '24px',
+                color: '#2c3e50'
+              }}>Mini Chatbot</h1>
+              <button
+                onClick={() => setIsSidebarExpanded(false)}
+                style={{
+                  border: 'none',
+                  background: 'none',
+                  cursor: 'pointer',
+                  padding: '8px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  opacity: 0.6,
+                  transition: 'opacity 0.2s',
+                  ':hover': {
+                    opacity: 1
+                  }
+                }}
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M11 19l-7-7 7-7"/>
+                  <path d="M4 12h16"/>
+                </svg>
+              </button>
+            </>
           ) : (
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
-            </svg>
+            <button
+              onClick={() => setIsSidebarExpanded(true)}
+              style={{
+                border: 'none',
+                background: 'none',
+                cursor: 'pointer',
+                padding: '8px',
+                display: 'flex',
+                alignItems: 'center',
+                opacity: 0.6,
+                transition: 'opacity 0.2s',
+                ':hover': {
+                  opacity: 1
+                }
+              }}
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
+              </svg>
+            </button>
           )}
         </div>
 
         {/* 新对话按钮 - 收缩时只显示图标 */}
         <button
           onClick={handleNewChat}
+          disabled={streaming}
           style={{
             margin: '15px',
-            padding: '10px',
-            border: '1px solid #e0e0e0',
-            borderRadius: '8px',
-            background: '#f8f9fa',
-            cursor: 'pointer',
+            padding: '0',
+            border: 'none',
+            background: 'transparent',
+            cursor: streaming ? 'not-allowed' : 'pointer',
             display: 'flex',
             alignItems: 'center',
             justifyContent: isSidebarExpanded ? 'flex-start' : 'center',
-            gap: '8px',
-            transition: 'all 0.2s'
+            gap: '12px',
+            transition: 'all 0.2s',
+            opacity: streaming ? 0.5 : 1
           }}
         >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M12 5v14M5 12h14"/>
-          </svg>
+          <div style={{
+            width: '32px',
+            height: '32px',
+            borderRadius: '50%',
+            background: streaming ? '#ccc' : '#1976d2',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: '#fff',
+            flexShrink: 0
+          }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M12 5v14M5 12h14"/>
+            </svg>
+          </div>
           {isSidebarExpanded && '新对话'}
         </button>
 
@@ -961,41 +1073,107 @@ function Chat() {
           {conversations.map(conv => (
             <div
               key={conv.id}
-              onClick={() => handleConversationClick(conv)}
+              onClick={() => !streaming && handleConversationClick(conv)}
               style={{
-                padding: '10px',
+                padding: isSidebarExpanded ? '10px' : '8px',
                 marginBottom: '8px',
                 borderRadius: '8px',
-                backgroundColor: conv.active ? '#e3f2fd' : 'transparent',
-                cursor: 'pointer',
+                backgroundColor: 'transparent',
+                cursor: streaming && !conv.active ? 'not-allowed' : 'pointer',  // 当前对话保持可点击
                 transition: 'all 0.2s',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: isSidebarExpanded ? 'flex-start' : 'center',
                 gap: '8px',
                 fontSize: '14px',
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis'
+                opacity: streaming && !conv.active ? 0.5 : 1  // 非当前对话变灰
               }}
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
-              </svg>
-              {isSidebarExpanded && (conv.title || '新对话')}
+              {isSidebarExpanded ? (
+                <>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
+                  </svg>
+                  <span style={{
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    flex: 1,
+                    color: conv.active ? '#1976d2' : (streaming ? '#999' : 'inherit')  // 非当前对话文字变灰
+                  }}>
+                    {conv.title || '新对话'}
+                  </span>
+                </>
+              ) : (
+                <div style={{
+                  width: '32px',
+                  height: '32px',
+                  borderRadius: '50%',
+                  backgroundColor: conv.active 
+                    ? `hsl(${hashCode(conv.title || '新对话') % 360}, 80%, 65%)`  // 当前对话保持高亮
+                    : (streaming ? '#ccc' : `hsl(${hashCode(conv.title || '新对话') % 360}, 70%, 80%)`),  // 其他变灰
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#fff',
+                  fontSize: '14px',
+                  fontWeight: 'bold',
+                  flexShrink: 0,
+                  transition: 'all 0.2s'
+                }}>
+                  {(conv.title || '新对话').charAt(0)}
+                </div>
+              )}
             </div>
           ))}
         </div>
-      </div>
 
+        {/* 清除所有对话按钮 */}
+        <button
+          onClick={handleClearAll}
+          disabled={streaming}
+          style={{
+            margin: '15px',
+            padding: '0',
+            border: 'none',
+            background: 'transparent',
+            color: '#ef5350',
+            cursor: streaming ? 'not-allowed' : 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: isSidebarExpanded ? 'flex-start' : 'center',
+            gap: '12px',
+            transition: 'all 0.2s',
+            opacity: streaming ? 0.5 : 1
+          }}
+        >
+          <div style={{
+            width: '32px',
+            height: '32px',
+            borderRadius: '50%',
+            background: streaming ? '#ccc' : '#ef5350',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: '#fff',
+            flexShrink: 0
+          }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M5 12h14"/>
+            </svg>
+          </div>
+          {isSidebarExpanded && '清除所有对话'}
+        </button>
+      </div>
+      
       {/* 主聊天区域 */}
       <div style={{ 
         flex: 1,
         padding: '20px',
         transition: 'margin-left 0.3s ease',
-        display: 'flex',  // 添加 flex 布局
-        flexDirection: 'column',  // 垂直排列
-        height: '100vh'  // 使用全屏高度
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100vh'
       }}>
         {/* 头部区域 */}
         <div style={{
@@ -1004,7 +1182,7 @@ function Chat() {
           alignItems: 'center',
           padding: '5px 0 15px',
           gap: '20px',
-          flexShrink: 0  // 防止头部压缩
+          flexShrink: 0
         }}>
           <div style={{
             display: 'flex',
@@ -1044,7 +1222,7 @@ function Chat() {
 
         {/* 聊天区域和输入框容器 */}
         <div style={{
-          flex: 1,  // 填充剩余空间
+          flex: 1,
           display: 'flex',
           flexDirection: 'column',
           border: '1px solid #e0e0e0',
@@ -1052,7 +1230,7 @@ function Chat() {
           backgroundColor: '#fff',
           boxShadow: '0 2px 12px rgba(0,0,0,0.05)',
           overflow: 'hidden',
-          marginBottom: '20px'  // 距离底部留出空间
+          marginBottom: '20px'
         }}>
           {/* 聊天区域 */}
           <div 
@@ -1105,7 +1283,7 @@ function Chat() {
                         content={null}
                         reasoningContent={reasoningText}
                         isUser={false}
-                        isStreaming={isReasoning}  // 使用 isReasoning 替代 true
+                        isStreaming={isReasoning}
                       />
                     )}
                     {currentResponse && !isReasoning && (
@@ -1121,12 +1299,12 @@ function Chat() {
                 )}
               </>
             )}
-      </div>
-      
+          </div>
+          
           {/* 输入区域 */}
           <div style={{ 
             borderTop: '1px solid #e0e0e0',
-            padding: '15px',  // 增加内边距
+            padding: '15px',
             backgroundColor: '#f8f9fa'
           }}>
             <form 
@@ -1141,6 +1319,7 @@ function Chat() {
           value={input}
           onChange={(e) => setInput(e.target.value)}
                 onFocus={handleInputFocus}
+                disabled={streaming}
                 style={{ 
                   flex: 1, 
                   padding: '12px 16px',
@@ -1149,9 +1328,10 @@ function Chat() {
                   fontSize: '16px',
                   outline: 'none',
                   transition: 'border-color 0.2s',
-                  backgroundColor: '#fff'
+                  backgroundColor: streaming ? '#f5f5f5' : '#fff',
+                  cursor: streaming ? 'not-allowed' : 'text'
                 }}
-                placeholder="输入消息..."
+                placeholder={streaming ? '正在生成回复...' : '输入消息...'}
               />
               {streaming ? (
                 <button 
@@ -1176,17 +1356,18 @@ function Chat() {
               ) : (
                 <button 
                   type="submit" 
+                  disabled={streaming}
                   style={{ 
                     padding: '12px 24px',
-                    backgroundColor: '#1976d2',
+                    backgroundColor: streaming ? '#e0e0e0' : '#1976d2',
                     color: 'white',
                     border: 'none',
                     borderRadius: '8px',
-                    cursor: 'pointer',
+                    cursor: streaming ? 'not-allowed' : 'pointer',
                     fontSize: '16px',
                     transition: 'background-color 0.2s',
                     ':hover': {
-                      backgroundColor: '#1565c0'
+                      backgroundColor: streaming ? '#e0e0e0' : '#1565c0'
                     }
                   }}
                 >
@@ -1210,5 +1391,15 @@ style.textContent = `
   }
 `;
 document.head.appendChild(style);
+
+// 添加辅助函数，用于生成稳定的哈希值
+const hashCode = (str) => {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) - hash) + str.charCodeAt(i);
+    hash = hash & hash;
+  }
+  return Math.abs(hash);
+};
 
 export default Chat 
