@@ -3,8 +3,11 @@ import axios from 'axios'
 import { baseURL, apiKey, modelOptions, maxHistoryLength, serverURL } from './Config'
 import ReactMarkdown from 'react-markdown'
 
+// 添加复制成功提示状态
+const [copyFeedback, setCopyFeedback] = useState(null);
+
 // 修改 MessageBubble 组件以同时显示两种内容
-const MessageBubble = ({ content, reasoningContent, isUser, onRetry, onCopy, onEdit, isStreaming }) => {
+const MessageBubble = ({ content, reasoningContent, isUser, onRetry, onCopy, onEdit, isStreaming, id, highlightedMessageId, timestamp }) => {
   const [showButtons, setShowButtons] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState(content);
@@ -13,6 +16,32 @@ const MessageBubble = ({ content, reasoningContent, isUser, onRetry, onCopy, onE
   const handleEditSubmit = () => {
     onEdit(editContent);
     setIsEditing(false);
+  };
+
+  // 格式化时间戳函数
+  const formatTimestamp = (timestamp) => {
+    if (!timestamp) return '';
+    
+    const date = new Date(timestamp);
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    
+    // 判断是否是今天或昨天
+    let prefix = '';
+    if (date >= today) {
+      prefix = '今天 ';
+    } else if (date >= yesterday) {
+      prefix = '昨天 ';
+    } else {
+      // 显示日期，如 2023/04/20
+      prefix = `${date.getFullYear()}/${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getDate().toString().padStart(2, '0')} `;
+    }
+    
+    // 时间部分 HH:mm
+    const time = `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+    return prefix + time;
   };
 
   return (
@@ -25,6 +54,7 @@ const MessageBubble = ({ content, reasoningContent, isUser, onRetry, onCopy, onE
           width: '100%'
         }}>
           <div 
+            className="reasoning-bubble"
             onClick={() => setIsReasoningExpanded(!isReasoningExpanded)}
             style={{
               backgroundColor: '#f5f5f5',
@@ -123,12 +153,11 @@ const MessageBubble = ({ content, reasoningContent, isUser, onRetry, onCopy, onE
                       fill="none" 
                       stroke="currentColor" 
                       strokeWidth="2"
-                      style={{ animation: 'spin 2s linear infinite' }}
                     >
-                      <circle cx="12" cy="12" r="10" />
-                      <path d="M12 6v6l4 2" />
+                      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                      <polyline points="22 4 12 14.01 9 11.01" />
                     </svg>
-                    思考中...（点击展开）
+                    思考完成（点击展开）
                   </>
                 ) : (
                   <>
@@ -159,7 +188,8 @@ const MessageBubble = ({ content, reasoningContent, isUser, onRetry, onCopy, onE
           alignItems: 'flex-end',
           justifyContent: isUser ? 'flex-end' : 'flex-start',
           width: '100%',
-          gap: '8px'
+          gap: '8px',
+          transition: 'all 0.2s'
         }}>
           {/* 用户消息的操作按钮 */}
           {isUser && !isEditing && (
@@ -293,16 +323,22 @@ const MessageBubble = ({ content, reasoningContent, isUser, onRetry, onCopy, onE
               </div>
             </div>
           ) : (
-            <div style={{
-              backgroundColor: isUser ? '#e3f2fd' : '#f5f5f5',
-              padding: '8px 12px',
-              borderRadius: '15px',
-              maxWidth: '85%',
-              wordBreak: 'break-word',
-              boxShadow: '0 1px 2px rgba(0,0,0,0.1)',
-              fontSize: '1em',
-              lineHeight: '1.4'
-            }}>
+            <div 
+              className={`message-bubble ${isUser ? 'user' : 'assistant'}`}
+              style={{
+                backgroundColor: isUser && id === highlightedMessageId 
+                  ? '#d4edda' // 高亮绿色
+                  : (isUser ? '#e3f2fd' : '#f5f5f5'),
+                padding: '8px 12px',
+                borderRadius: '15px',
+                maxWidth: '85%',
+                wordBreak: 'break-word',
+                boxShadow: '0 1px 2px rgba(0,0,0,0.1)',
+                fontSize: '1em',
+                lineHeight: '1.4',
+                transition: 'background-color 0.5s ease'
+              }}
+            >
               {isUser ? content : (
                 <ReactMarkdown
                   children={content}
@@ -329,6 +365,18 @@ const MessageBubble = ({ content, reasoningContent, isUser, onRetry, onCopy, onE
                   }}
                 />
               )}
+            </div>
+          )}
+
+          {/* 时间戳 */}
+          {timestamp && (
+            <div className="message-timestamp" style={{
+              fontSize: '11px',
+              color: '#999',
+              marginTop: '4px',
+              padding: '0 4px'
+            }}>
+              {formatTimestamp(timestamp)}
             </div>
           )}
 
@@ -435,23 +483,72 @@ function Chat() {
   const lastScrollPosition = useRef(0);  // 记录最后的滚动位置
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(true);
   const [conversations, setConversations] = useState(() => {
-    const saved = localStorage.getItem('chatHistory');
+    const saved = localStorage.getItem('chatHistory');  // 改回 chatHistory
     if (saved) {
       const parsed = JSON.parse(saved);
-      // 确保每个对话都有正确的标题
-      return parsed.map(conv => ({
-        ...conv,
-        title: conv.messages?.find(msg => msg.role === 'user')?.content?.slice(0, 30) || '新对话'
+      return parsed.map(chat => ({
+        ...chat,
+        title: chat.title || '新对话',
+        lastMessage: chat.lastMessage || ''
       }));
     }
     return [{ 
-      id: Date.now().toString(), 
-      title: '新对话', 
-      active: true, 
-      messages: [{ role: "system", content: "You are a helpful assistant." }],
-      timestamp: Date.now()
+      id: 'chat_' + Date.now(),  // 保持 chat_ 前缀
+      title: '新对话',
+      lastMessage: '',
+      timestamp: Date.now(),
+      active: true,
+      messages: [{ role: "system", content: "You are a helpful assistant." }]
     }];
   });
+
+  // 添加标题编辑状态
+  const [editingTitle, setEditingTitle] = useState(null);
+  const [editingTitleValue, setEditingTitleValue] = useState('');
+
+  // 添加标题编辑处理函数
+  const handleTitleEdit = (conv) => {
+    setEditingTitle(conv.id);
+    setEditingTitleValue(conv.title);
+  };
+
+  // 添加标题保存函数
+  const handleTitleSave = (convId) => {
+    if (!editingTitleValue.trim()) return;
+    
+    const updatedConversations = conversations.map(conv => {
+      if (conv.id === convId) {
+        return {
+          ...conv,
+          title: editingTitleValue.trim()
+        };
+      }
+      return conv;
+    });
+    
+    localStorage.setItem('chatHistory', JSON.stringify(updatedConversations));
+    setConversations(updatedConversations);
+    setEditingTitle(null);
+  };
+
+  // 添加分页状态
+  const [displayLimit, setDisplayLimit] = useState(20);  // 初始显示20条消息
+  const [loadingHistory, setLoadingHistory] = useState(false);
+
+  // 添加消息高亮状态
+  const [highlightedMessageId, setHighlightedMessageId] = useState(null);
+
+  // 添加深色模式状态
+  const [darkMode, setDarkMode] = useState(() => {
+    const saved = localStorage.getItem('darkMode');
+    return saved ? JSON.parse(saved) : false;
+  });
+
+  // 使用效果监听深色模式变化
+  useEffect(() => {
+    localStorage.setItem('darkMode', JSON.stringify(darkMode));
+    document.body.classList.toggle('dark-mode', darkMode);
+  }, [darkMode]);
 
   // 修改滚动到底部的函数
   const scrollToBottom = (force = false) => {
@@ -481,19 +578,13 @@ function Chat() {
 
   // 修改滚动事件处理函数
   const handleScroll = (e) => {
-    const { scrollTop, scrollHeight, clientHeight } = e.target;
-    const distanceFromBottom = scrollHeight - clientHeight - scrollTop;
-    
-    // 只在用户主动滚动时更新状态
-    if (Math.abs(scrollTop - lastScrollPosition.current) > 30) {
-      lastUserInteraction.current = Date.now();
-      setUserHasScrolled(true);
-      lastScrollPosition.current = scrollTop;
-    }
-
-    // 如果接近底部，重置用户滚动标记
-    if (distanceFromBottom < 100) {
-      setUserHasScrolled(false);
+    const { scrollTop } = e.target;
+    if (scrollTop === 0 && !loadingHistory) {
+      setLoadingHistory(true);
+      setTimeout(() => {
+        setDisplayLimit(prev => prev + 20);
+        setLoadingHistory(false);
+      }, 500);
     }
   };
 
@@ -547,24 +638,34 @@ function Chat() {
   };
 
   const handleSubmit = async (e) => {
-    e.preventDefault()
-    if (!input.trim()) return
+    e.preventDefault();
+    if (!input.trim()) return;
 
-    const newMessage = { role: 'user', content: input }
+    const messageId = Date.now().toString();
+    const newMessage = { 
+      id: messageId,
+      role: 'user', 
+      content: input 
+    }
     let updatedDisplayMessages = [...displayMessages, newMessage]
     let updatedRequestMessages = [...requestMessages, newMessage]
     
-    // 更新当前对话的历史记录和标题
+    // 设置高亮状态
+    setHighlightedMessageId(messageId);
+    setTimeout(() => setHighlightedMessageId(null), 1000); // 1秒后取消高亮
+    
+    // 更新当前对话的历史记录、标题和最后一条消息
     const updatedConversations = conversations.map(conv => {
       if (conv.active) {
-        // 如果是第一条用户消息，将其作为标题
         const userMessages = conv.messages.filter(msg => msg.role === 'user');
         const isFirstUserMessage = userMessages.length === 0;
-        const newTitle = isFirstUserMessage ? input.slice(0, 30) : conv.title;
         
         return {
           ...conv,
-          title: newTitle,  // 立即更新标题
+          title: isFirstUserMessage 
+            ? (input.length > 50 ? input.slice(0, 50) + '...' : input)
+            : conv.title,
+          lastMessage: input.length > 20 ? input.slice(0, 20) + '...' : input,  // 添加最后一条消息预览
           messages: updatedDisplayMessages,
           timestamp: Date.now()
         };
@@ -572,12 +673,17 @@ function Chat() {
       return conv;
     });
 
-    // 立即更新状态和本地存储
+    // 更新状态和本地存储
     setDisplayMessages(updatedDisplayMessages);
     setRequestMessages(updatedRequestMessages);
     localStorage.setItem('chatHistory', JSON.stringify(updatedConversations));
-    setConversations(updatedConversations);  // 立即更新对话列表
-    setInput('');
+    setConversations(updatedConversations);
+      setInput('');
+    // 重置输入框高度
+    const textarea = e.target.querySelector('textarea');
+    if (textarea) {
+      textarea.style.height = '32px';  // 重置为初始高度
+    }
 
     // 开始流式响应
     setStreaming(true);
@@ -602,6 +708,13 @@ function Chat() {
       });
 
       await handleStreamResponse(response, updatedDisplayMessages);  // 传入更新后的消息列表
+
+      // 发送成功后高亮消息
+      setHighlightedMessageId(messageId);
+      setTimeout(() => {
+        setHighlightedMessageId(null);
+      }, 500);  // 500ms 后取消高亮
+
     } catch (error) {
       if (error.name === 'AbortError') {
         console.log('请求被中止');
@@ -610,7 +723,7 @@ function Chat() {
       console.error('请求失败:', error)
       setStreaming(false)
       const errorMessage = {
-        role: 'assistant',
+        role: 'assistant', 
         content: '发生错误：' + error.message
       }
       setDisplayMessages(prev => [...prev, errorMessage])
@@ -760,168 +873,92 @@ function Chat() {
 
   const currentTurns = getCurrentTurns(requestMessages)
 
-  // 修改 handleCopy 函数
-  const handleCopy = async (text) => {
-    try {
-      // 创建一个临时文本区域
-      const textArea = document.createElement('textarea');
-      textArea.value = text;
+  // 增强的响应式布局
+  useEffect(() => {
+    const handleResize = () => {
+      const isMobile = window.innerWidth < 768;
+      setIsSidebarExpanded(!isMobile);
       
-      // 将文本区域添加到文档中
-      document.body.appendChild(textArea);
-      
-      // 选择文本
-      textArea.select();
-      
-      try {
-        // 尝试使用新 API
-        await navigator.clipboard.writeText(text);
-      } catch {
-        // 如果新 API 失败，使用传统方法
-        document.execCommand('copy');
+      // 如果是移动设备，自动滚动到底部
+      if (isMobile && chatContainerRef.current) {
+        chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
       }
-      
-      // 移除临时文本区域
-      document.body.removeChild(textArea);
-      
-    } catch (err) {
-      console.error('复制失败:', err);
-    }
-  };
-
-  // 修改编辑处理函数
-  const handleEdit = async (message, newContent) => {
-    // 找到要编辑的消息之前的所有消息
-    const messageIndex = displayMessages.findIndex(msg => msg === message);
-    const previousMessages = displayMessages.slice(0, messageIndex);
-    
-    // 创建新的用户消息
-    const editedMessage = { role: 'user', content: newContent };
-    
-    // 更新消息列表
-    const updatedMessages = [...previousMessages, editedMessage];
-    setDisplayMessages(updatedMessages);
-    setRequestMessages([...previousMessages.map(msg => ({
-      role: msg.role,
-      content: msg.content
-    })), editedMessage]);
-    
-    // 重新发送请求
-    setStreaming(true);
-    setCurrentResponse('');
-    setReasoningText('');
-    setIsReasoning(true);
-
-    try {
-      const response = await fetch(`${serverURL}/api/chat`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          messages: [...previousMessages.map(msg => ({
-            role: msg.role,
-            content: msg.content
-          })), editedMessage],
-          model: selectedModel
-        })
-      });
-
-      // 传入更新后的消息列表
-      await handleStreamResponse(response, updatedMessages);
-    } catch (error) {
-      console.error('编辑请求失败:', error);
-      setStreaming(false);
-      const errorMessage = {
-        role: 'assistant', 
-        content: '编辑请求失败：' + error.message
-      };
-      setDisplayMessages(prev => [...prev, errorMessage]);
-      setRequestMessages(prev => [...prev, errorMessage]);
-    }
-  };
-
-  // 修改点击历史对话的处理函数
-  const handleConversationClick = (conv) => {
-    const updatedConversations = conversations.map(c => ({
-      ...c,
-      active: c.id === conv.id
-    }));
-    localStorage.setItem('chatHistory', JSON.stringify(updatedConversations));
-    setConversations(updatedConversations);
-    
-    // 重置当前状态
-    setCurrentResponse('');
-    setReasoningText('');
-    setStreaming(false);
-    
-    // 设置消息
-    const messages = conv.messages || [{ role: "system", content: "You are a helpful assistant." }];
-    setDisplayMessages(messages);
-    setRequestMessages(messages.map(msg => ({
-      role: msg.role,
-      content: msg.content
-    })));
-
-    // 直接设置滚动位置
-    if (chatContainerRef.current) {
-      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
-    }
-  };
-
-  // 修改新对话按钮的处理
-  const handleNewChat = () => {
-    const newConversation = {
-      id: Date.now().toString(),
-      title: '新对话',  // 初始标题
-      active: true,
-      messages: [{ role: "system", content: "You are a helpful assistant." }],
-      timestamp: Date.now()
     };
     
-    const updatedConversations = conversations.map(conv => ({
-      ...conv,
-      active: false
-    }));
-    
-    const newConversations = [newConversation, ...updatedConversations];
-    localStorage.setItem('chatHistory', JSON.stringify(newConversations));
-    setConversations(newConversations);
-    setDisplayMessages(newConversation.messages);
-    setRequestMessages(newConversation.messages);
-    setCurrentResponse('');
-    setReasoningText('');
-  };
+    handleResize(); // 初始化
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
-  // 添加清除所有对话的处理函数
-  const handleClearAll = () => {
-    if (window.confirm('确定要清除所有对话吗？')) {
-      const newConversation = {
-        id: Date.now().toString(),
+  // 添加删除会话的处理函数
+  const handleDeleteConversation = (e, convId) => {
+    e.stopPropagation();  // 阻止触发会话选择
+    
+    const updatedConversations = conversations.filter(conv => conv.id !== convId);
+    if (updatedConversations.length > 0) {
+      // 如果删除的是当前会话，激活第一个会话
+      if (conversations.find(conv => conv.id === convId)?.active) {
+        updatedConversations[0].active = true;
+        setDisplayMessages(updatedConversations[0].messages);
+        setRequestMessages(updatedConversations[0].messages);
+      }
+    } else {
+      // 如果删除了最后一个会话，创建新会话
+      updatedConversations.push({
+        id: 'chat_' + Date.now(),
         title: '新对话',
         active: true,
         messages: [{ role: "system", content: "You are a helpful assistant." }],
         timestamp: Date.now()
-      };
-      
-      localStorage.setItem('chatHistory', JSON.stringify([newConversation]));
-      setConversations([newConversation]);
-      setDisplayMessages(newConversation.messages);
-      setRequestMessages(newConversation.messages);
-      setCurrentResponse('');
-      setReasoningText('');
+      });
     }
+    
+    localStorage.setItem('chatHistory', JSON.stringify(updatedConversations));
+    setConversations(updatedConversations);
+  };
+
+  // 添加全局快捷键支持
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // Ctrl+N 或 Cmd+N: 新建对话
+      if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
+        e.preventDefault();
+        if (!streaming) handleNewChat();
+      }
+      
+      // Esc: 停止生成
+      if (e.key === 'Escape' && streaming) {
+        handleStop();
+      }
+    };
+    
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [streaming]);
+
+  // 增强复制功能，提供用户反馈
+  const handleCopy = (content) => {
+    navigator.clipboard.writeText(content)
+      .then(() => {
+        setCopyFeedback("已复制到剪贴板");
+        setTimeout(() => setCopyFeedback(null), 2000);
+      })
+      .catch(() => {
+        setCopyFeedback("复制失败，请重试");
+        setTimeout(() => setCopyFeedback(null), 2000);
+      });
   };
 
   return (
-    <div style={{ 
+    <div className="main-container" style={{
       display: 'flex',
       height: '100vh',
+      maxHeight: '100vh',
       overflow: 'hidden'
     }}>
       {/* 左边栏 */}
-      <div style={{
-        width: isSidebarExpanded ? '300px' : '50px',
+      <div className="sidebar" style={{
+        width: isSidebarExpanded ? '280px' : '60px',
         borderRight: '1px solid #e0e0e0',
         backgroundColor: '#fff',
         transition: 'width 0.3s ease',
@@ -929,164 +966,150 @@ function Chat() {
         flexDirection: 'column',
         position: 'relative'
       }}>
-        {/* 收缩按钮 - 移到中间右侧 */}
-                <button 
-          onClick={() => setIsSidebarExpanded(!isSidebarExpanded)}
-          style={{
-            position: 'absolute',
-            right: '-12px',  // 调整到右侧
-            top: '50%',      // 垂直居中
-            transform: 'translateY(-50%)',  // 确保完全居中
-            width: '24px',
-            height: '24px',
-            border: '1px solid #e0e0e0',
-            borderRadius: '50%',
-            background: '#fff',
-            cursor: 'pointer',
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            zIndex: 10,
-            boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-          }}
-        >
-          <svg 
-            width="14" 
-            height="14" 
-            viewBox="0 0 24 24" 
-            fill="none" 
-            stroke="currentColor" 
-            strokeWidth="2"
-            style={{
-              transform: isSidebarExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
-              transition: 'transform 0.3s ease'
-            }}
-          >
-            <path d="M9 18l6-6-6-6"/>
-          </svg>
-                </button>
-
         {/* 标题区域 - 移除展开按钮 */}
-        <div style={{
-          padding: '20px 15px',
+        <div className="title-area" style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '15px',
           borderBottom: '1px solid #e0e0e0',
-          textAlign: 'center',
-          display: 'flex',  // 添加 flex 布局
-          alignItems: 'center',  // 垂直居中
-          justifyContent: isSidebarExpanded ? 'space-between' : 'center'  // 展开时两端对齐，收起时居中
+          height: '64px',
+          boxSizing: 'border-box'
         }}>
-          {isSidebarExpanded ? (
-            <>
-              <h1 style={{ 
-                margin: 0,
-                fontSize: '24px',
-                color: '#2c3e50'
-              }}>Mini Chatbot</h1>
-              <button
-                onClick={() => setIsSidebarExpanded(false)}
-                style={{
-                  border: 'none',
-                  background: 'none',
-                  cursor: 'pointer',
-                  padding: '8px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  opacity: 0.6,
-                  transition: 'opacity 0.2s',
-                  ':hover': {
-                    opacity: 1
-                  }
-                }}
-              >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M11 19l-7-7 7-7"/>
-                  <path d="M4 12h16"/>
-                </svg>
-              </button>
-            </>
-          ) : (
-            <button
-              onClick={() => setIsSidebarExpanded(true)}
-              style={{
-                border: 'none',
-                background: 'none',
-                cursor: 'pointer',
-                padding: '8px',
-                display: 'flex',
-                alignItems: 'center',
-                opacity: 0.6,
-                transition: 'opacity 0.2s',
-                ':hover': {
-                  opacity: 1
-                }
-              }}
-            >
+          {/* 使用图标+文字的组合，在折叠时只显示图标 */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            {/* 聊天机器人图标 */}
+            <div className="app-icon" style={{
+              width: '32px',
+              height: '32px',
+              borderRadius: '8px',
+              backgroundColor: darkMode ? '#304254' : '#1976d2',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#fff',
+              fontSize: '18px'
+            }}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
+                <circle cx="9" cy="10" r="1"/>
+                <circle cx="15" cy="10" r="1"/>
+                <path d="M9 14h6"/>
               </svg>
-            </button>
-          )}
+            </div>
+            
+            {/* 只在展开状态显示文字 */}
+            {isSidebarExpanded && (
+              <h1 style={{
+                margin: 0,
+                fontSize: '22px',
+                fontWeight: 'bold',
+                color: darkMode ? '#b0c4de' : '#2c3e50'
+              }}>
+                Mini Chatbot
+              </h1>
+            )}
+          </div>
+          
+          {/* 侧边栏控制按钮 */}
+                <button 
+            className="sidebar-toggle-btn"
+            onClick={() => setIsSidebarExpanded(!isSidebarExpanded)}
+            style={{
+              background: 'none',
+              border: 'none',
+              padding: '6px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              color: darkMode ? '#b0c4de' : '#666',
+              opacity: 0.8,
+              transition: 'opacity 0.2s',
+              borderRadius: '4px'
+            }}
+            title={isSidebarExpanded ? "折叠边栏" : "展开边栏"}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              {isSidebarExpanded ? (
+                <path d="M13 19l-7-7 7-7" />
+              ) : (
+                <path d="M9 19l7-7-7-7" />
+              )}
+            </svg>
+          </button>
         </div>
 
         {/* 新对话按钮 - 收缩时只显示图标 */}
         <button
+          className="new-chat-button"
           onClick={handleNewChat}
-          disabled={streaming}
           style={{
-            margin: '15px',
-            padding: '0',
-            border: 'none',
-            background: 'transparent',
-            cursor: streaming ? 'not-allowed' : 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: isSidebarExpanded ? 'flex-start' : 'center',
-            gap: '12px',
-            transition: 'all 0.2s',
-            opacity: streaming ? 0.5 : 1
-          }}
-        >
-          <div style={{
-            width: '32px',
-            height: '32px',
-            borderRadius: '50%',
-            background: streaming ? '#ccc' : '#1976d2',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            color: '#fff',
-            flexShrink: 0
-          }}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M12 5v14M5 12h14"/>
-            </svg>
-          </div>
-          {isSidebarExpanded && '新对话'}
+            gap: '10px',
+            width: '100%',
+            padding: '12px',
+            backgroundColor: '#f5f5f5',
+            border: 'none',
+            borderBottom: '1px solid #e0e0e0',
+            cursor: 'pointer',
+            fontSize: '14px',
+            color: '#333',
+            transition: 'background-color 0.2s',
+            marginTop: '0', // 确保没有上边距
+          }}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+          {isSidebarExpanded && "新建对话"}
         </button>
 
         {/* 对话历史列表 - 收缩时只显示图标 */}
         <div style={{
           flex: 1,
           overflow: 'auto',
-          padding: '0 15px'
+          padding: '0 15px',
+          marginTop: '10px'  // 添加顶部间距
         }}>
-          {conversations.map(conv => (
+          {conversations.map((conv, index) => (
             <div
               key={conv.id}
+              className="conversation-item"
               onClick={() => !streaming && handleConversationClick(conv)}
               style={{
-                padding: isSidebarExpanded ? '10px' : '8px',
-                marginBottom: '8px',
+                padding: isSidebarExpanded ? '12px' : '8px',  // 增加内边距
+                marginBottom: '10px',  // 增加项目间距
                 borderRadius: '8px',
-                backgroundColor: 'transparent',
-                cursor: streaming && !conv.active ? 'not-allowed' : 'pointer',  // 当前对话保持可点击
+                backgroundColor: conv.active ? '#f0f7ff' : 'transparent',
+                cursor: streaming && !conv.active ? 'not-allowed' : 'pointer',
                 transition: 'all 0.2s',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: isSidebarExpanded ? 'flex-start' : 'center',
-                gap: '8px',
+                gap: '12px',  // 增加图标和文字间距
                 fontSize: '14px',
-                opacity: streaming && !conv.active ? 0.5 : 1  // 非当前对话变灰
+                opacity: streaming && !conv.active ? 0.5 : 1,
+                position: 'relative',
+                ':hover': {
+                  backgroundColor: conv.active ? '#f0f7ff' : '#f5f5f5'
+                },
+                '& .conversation-number': {
+                  width: '32px',
+                  height: '32px',
+                  borderRadius: '50%',
+                  backgroundColor: darkMode ? '#3a3a3a' : '#f0e68c',
+                  color: darkMode ? '#aaa' : '#333',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '14px',
+                  fontWeight: 'normal',
+                  margin: '8px auto'
+                }
               }}
             >
               {isSidebarExpanded ? (
@@ -1094,15 +1117,46 @@ function Chat() {
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
                   </svg>
-                  <span style={{
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
+                  <div style={{
                     flex: 1,
-                    color: conv.active ? '#1976d2' : (streaming ? '#999' : 'inherit')  // 非当前对话文字变灰
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '2px',
+                    overflow: 'hidden'
                   }}>
-                    {conv.title || '新对话'}
-                  </span>
+                    <div style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',  // 标题和时间戳两端对齐
+                      alignItems: 'center',
+                      paddingRight: '24px'  // 为删除按钮留出空间
+                    }}>
+                      <span style={{
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        color: conv.active ? '#1976d2' : (streaming ? '#999' : 'inherit')
+                      }}>
+                        {conv.title || '新对话'}
+                      </span>
+                      <span style={{
+                        fontSize: '12px',
+                        color: '#999',
+                        flexShrink: 0,  // 防止时间戳被压缩
+                        marginLeft: '4px'  // 减小与标题的间距
+                      }}>
+                        {formatTimestamp(conv.timestamp)}
+                      </span>
+                    </div>
+                    <span style={{
+                      fontSize: '12px',
+                      color: '#999',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap'
+                    }}>
+                      {conv.lastMessage || ''}
+                    </span>
+                  </div>
                 </>
               ) : (
                 <div style={{
@@ -1124,14 +1178,36 @@ function Chat() {
                   {(conv.title || '新对话').charAt(0)}
                 </div>
               )}
+              {isSidebarExpanded && (
+                <button
+                  className="delete-button"
+                  onClick={(e) => handleDeleteConversation(e, conv.id)}
+                  style={{
+                    position: 'absolute',
+                    right: '4px',  // 调整到更靠左的位置
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    padding: '4px',  // 减小内边距
+                    border: 'none',
+                    background: 'none',
+                    cursor: 'pointer',
+                    color: '#666',
+                    visibility: 'hidden',
+                    fontSize: '16px'
+                  }}
+                >
+                  ×
+                </button>
+              )}
             </div>
           ))}
-        </div>
-
+          </div>
+        
         {/* 清除所有对话按钮 */}
         <button
           onClick={handleClearAll}
           disabled={streaming}
+          className="clear-button"
           style={{
             margin: '15px',
             padding: '0',
@@ -1168,60 +1244,108 @@ function Chat() {
       
       {/* 主聊天区域 */}
       <div style={{ 
-        flex: 1,
-        padding: '20px',
-        transition: 'margin-left 0.3s ease',
+        flex: 1,  // 占据剩余空间
         display: 'flex',
         flexDirection: 'column',
-        height: '100vh'
+        height: '100vh',
+        overflow: 'hidden'  // 防止内容溢出
       }}>
         {/* 头部区域 */}
-        <div style={{
+        <div className="header" style={{
           display: 'flex',
-          justifyContent: 'flex-end',
+          justifyContent: 'space-between',
           alignItems: 'center',
-          padding: '5px 0 15px',
-          gap: '20px',
-          flexShrink: 0
+          padding: '0 20px',
+          height: '64px', // 与边栏标题区域保持一致
+          borderBottom: '1px solid #e0e0e0',
+          boxSizing: 'border-box'
         }}>
+          {/* 左侧：只保留模型选择 */}
+          <select 
+            value={selectedModel}
+            onChange={(e) => setSelectedModel(e.target.value)}
+            style={{
+              padding: '8px 12px',
+              borderRadius: '8px',
+              border: '1px solid #e0e0e0',
+              backgroundColor: '#fff',
+              fontSize: '14px',
+              color: '#2c3e50',
+              cursor: 'pointer',
+              outline: 'none'
+            }}
+          >
+            {modelOptions.map(model => (
+              <option key={model} value={model}>{model}</option>
+            ))}
+          </select>
+
+          {/* 右侧：对话轮次和导出按钮 */}
           <div style={{
             display: 'flex',
             alignItems: 'center',
-            gap: '20px'
+            gap: '12px'
           }}>
-            <select 
-              value={selectedModel}
-              onChange={(e) => setSelectedModel(e.target.value)}
-              style={{
-                padding: '8px 12px',
-                borderRadius: '8px',
-                border: '1px solid #e0e0e0',
-                backgroundColor: '#fff',
-                fontSize: '14px',
-                color: '#2c3e50',
-                cursor: 'pointer',
-                outline: 'none'
-              }}
-            >
-              {modelOptions.map(model => (
-                <option key={model} value={model}>{model}</option>
-              ))}
-            </select>
-            
-            <div style={{ 
+            <div className="turns-counter" style={{ 
               color: currentTurns >= maxHistoryLength ? '#ff4444' : '#666',
               fontSize: '14px',
               padding: '6px 12px',
-              backgroundColor: '#f5f5f5',
+              backgroundColor: darkMode ? '#2d2d2d' : '#f5f5f5',
               borderRadius: '6px'
             }}>
               对话轮次: {currentTurns}/{maxHistoryLength}
-            </div>
+      </div>
+      
+            {/* 添加导出按钮 */}
+            <button
+              onClick={handleExport}
+              style={{
+                padding: '6px 12px',
+                border: '1px solid ' + (darkMode ? '#444' : '#e0e0e0'),
+                borderRadius: '6px',
+                background: darkMode ? '#2d2d2d' : '#fff',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                color: darkMode ? '#e0e0e0' : '#666',
+                fontSize: '14px'
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+                <polyline points="7 10 12 15 17 10"/>
+                <line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+              导出
+            </button>
+            
+            {/* 添加深色模式切换按钮 */}
+            <button
+              onClick={() => setDarkMode(!darkMode)}
+              style={{
+                width: '30px',
+                height: '30px',
+                padding: '0',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: '50%',
+                border: 'none',
+                background: darkMode ? '#2d2d2d' : '#f5f5f5',
+                cursor: 'pointer',
+                color: darkMode ? '#e0e0e0' : '#666',
+                fontSize: '16px'
+              }}
+              title={darkMode ? "切换到浅色模式" : "切换到深色模式"}
+            >
+              {darkMode ? '☀️' : '🌙'}
+            </button>
           </div>
         </div>
 
         {/* 聊天区域和输入框容器 */}
-        <div style={{
+        <div className="chat-window" style={{
           flex: 1,
           display: 'flex',
           flexDirection: 'column',
@@ -1235,6 +1359,7 @@ function Chat() {
           {/* 聊天区域 */}
           <div 
             ref={chatContainerRef}
+            className="chat-container"
             onScroll={handleScroll}
             style={{ 
               flex: 1,
@@ -1264,18 +1389,33 @@ function Chat() {
               </div>
             ) : (
               <>
-                {displayMessages.filter(msg => msg.role !== 'system').map((msg, index) => (
-                  <MessageBubble 
-                    key={index}
-                    content={msg.content}
-                    reasoningContent={msg.reasoning_content}
-                    isUser={msg.role === 'user'}
-                    onRetry={!msg.isUser ? () => handleRetry(msg) : null}
-                    onCopy={handleCopy}
-                    onEdit={msg.role === 'user' ? (newContent) => handleEdit(msg, newContent) : null}
-                    isStreaming={streaming}
-                  />
-                ))}
+                {loadingHistory && (
+                  <div style={{ 
+                    textAlign: 'center', 
+                    color: '#666', 
+                    padding: '10px'
+                  }}>
+                    正在加载历史消息...
+                  </div>
+                )}
+                {displayMessages
+                  .filter(msg => msg.role !== 'system')
+                  .slice(-displayLimit)
+                  .map((msg, index) => (
+                    <MessageBubble 
+                      key={index}
+                      content={msg.content}
+                      reasoningContent={msg.reasoning}
+                      isUser={msg.role === 'user'}
+                      onRetry={msg.role !== 'user' ? handleRetry : null}
+                      onCopy={() => handleCopy(msg.content)}
+                      onEdit={msg.role === 'user' ? (newContent) => handleEdit(msg, newContent) : null}
+                      isStreaming={streaming}
+                      id={msg.id}
+                      highlightedMessageId={highlightedMessageId}
+                      timestamp={msg.timestamp}
+                    />
+                  ))}
                 {streaming && (
                   <>
                     {reasoningText && (
@@ -1284,6 +1424,9 @@ function Chat() {
                         reasoningContent={reasoningText}
                         isUser={false}
                         isStreaming={isReasoning}
+                        id={null}
+                        highlightedMessageId={null}
+                        timestamp={null}
                       />
                     )}
                     {currentResponse && !isReasoning && (
@@ -1292,6 +1435,9 @@ function Chat() {
                         reasoningContent={null}
                         isUser={false}
                         isStreaming={false}
+                        id={null}
+                        highlightedMessageId={null}
+                        timestamp={null}
                       />
                     )}
                     <div ref={messagesEndRef} style={{ height: '1px', margin: '0' }} />
@@ -1302,37 +1448,54 @@ function Chat() {
           </div>
           
           {/* 输入区域 */}
-          <div style={{ 
+          <div className="input-area" style={{ 
             borderTop: '1px solid #e0e0e0',
-            padding: '15px',
+            padding: '10px 15px',
             backgroundColor: '#f8f9fa'
           }}>
             <form 
               onSubmit={handleSubmit} 
               style={{ 
                 display: 'flex',
-                gap: '12px'
+                gap: '12px',
+                alignItems: 'flex-start'
               }}
             >
-        <input
-                type="text"
+        <textarea
           value={input}
-          onChange={(e) => setInput(e.target.value)}
-                onFocus={handleInputFocus}
-                disabled={streaming}
-                style={{ 
-                  flex: 1, 
-                  padding: '12px 16px',
-                  borderRadius: '8px',
-                  border: '1px solid #e0e0e0',
-                  fontSize: '16px',
-                  outline: 'none',
-                  transition: 'border-color 0.2s',
-                  backgroundColor: streaming ? '#f5f5f5' : '#fff',
-                  cursor: streaming ? 'not-allowed' : 'text'
-                }}
-                placeholder={streaming ? '正在生成回复...' : '输入消息...'}
-              />
+          onChange={(e) => {
+            setInput(e.target.value);
+            e.target.style.height = '32px';  // 设置初始高度
+            const height = Math.min(e.target.scrollHeight, 80);  // 限制最大高度为80px
+            e.target.style.height = height + 'px';
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault();
+              handleSubmit(e);
+              e.target.style.height = '32px';  // Enter 发送后也重置高度
+            }
+          }}
+          onFocus={handleInputFocus}
+          disabled={streaming}
+          style={{ 
+            flex: 1, 
+            padding: '6px 12px',
+            borderRadius: '8px',
+            border: '1px solid #e0e0e0',
+            fontSize: '14px',
+            outline: 'none',
+            transition: 'border-color 0.2s, height 0.2s',
+            backgroundColor: streaming ? '#f5f5f5' : '#fff',
+            cursor: streaming ? 'not-allowed' : 'text',
+            resize: 'none',
+            height: '32px',  // 初始高度
+            maxHeight: '80px',
+            overflowY: 'auto',
+            lineHeight: '20px'
+          }}
+          placeholder={streaming ? '正在生成回复...' : '按 Enter 发送，Shift+Enter 换行'}
+        />
               {streaming ? (
                 <button 
                   type="button" 
@@ -1352,11 +1515,12 @@ function Chat() {
                   }}
                 >
                   停止
-                </button>
+        </button>
               ) : (
                 <button 
                   type="submit" 
                   disabled={streaming}
+                  className="send-button"
                   style={{ 
                     padding: '12px 24px',
                     backgroundColor: streaming ? '#e0e0e0' : '#1976d2',
@@ -1375,19 +1539,240 @@ function Chat() {
         </button>
               )}
             </form>
-          </div>
+      </div>
         </div>
       </div>
+      
+      {/* 添加复制反馈提示 */}
+      {copyFeedback && (
+        <div 
+          className="copy-feedback"
+          style={{
+            position: 'fixed',
+            bottom: '20px',
+            right: '20px',
+            backgroundColor: darkMode ? '#2d2d2d' : '#333',
+            color: '#fff',
+            padding: '8px 16px',
+            borderRadius: '4px',
+            boxShadow: '0 2px 10px rgba(0,0,0,0.2)',
+            zIndex: 1000,
+            animation: 'fadeIn 0.3s ease'
+          }}
+        >
+          {copyFeedback}
+        </div>
+      )}
     </div>
   );
 }
 
-// 添加旋转动画样式
+// 更新深色模式样式表，添加边栏顶部边框和缩进按钮的样式
 const style = document.createElement('style');
 style.textContent = `
   @keyframes spin {
     from { transform: rotate(0deg); }
     to { transform: rotate(360deg); }
+  }
+
+  .conversation-item:hover .delete-button {
+    visibility: visible !important;
+  }
+  
+  /* 深色模式基础样式 */
+  body.dark-mode {
+    background-color: #1a1a1a;
+    color: #e0e0e0;
+  }
+  
+  /* 主容器深色样式 */
+  body.dark-mode #root {
+    background-color: #1a1a1a;
+  }
+  
+  /* 整体界面深色样式 */
+  body.dark-mode .main-container {
+    background-color: #1a1a1a !important;
+  }
+  
+  /* 聊天窗口深色样式 */
+  body.dark-mode .chat-window {
+    background-color: #232323 !important;
+    border-color: #444 !important;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.2) !important;
+  }
+  
+  /* 输入区域深色样式 */
+  body.dark-mode .input-area {
+    background-color: #1e1e1e !important;
+    border-top: 1px solid #444 !important;
+  }
+  
+  /* 边栏深色样式 - 修正边框 */
+  body.dark-mode .sidebar {
+    background-color: #232323 !important;
+    border: none !important; /* 移除所有边框 */
+    border-right: 1px solid #333 !important; /* 只保留右侧边框 */
+  }
+  
+  /* 对话项深色样式 */
+  body.dark-mode .conversation-item {
+    background-color: transparent !important;
+    color: #e0e0e0 !important;
+  }
+  
+  body.dark-mode .conversation-item:hover {
+    background-color: #2a2a2a !important;
+  }
+  
+  body.dark-mode .conversation-item.active {
+    background-color: #304254 !important;
+    color: #ffffff !important;
+  }
+  
+  /* 头像深色样式 */
+  body.dark-mode .avatar-icon {
+    background-color: #304254 !important;
+    color: #ffffff !important;
+  }
+  
+  /* 消息气泡深色样式 */
+  body.dark-mode .message-bubble {
+    background-color: #333333 !important;
+    color: #e0e0e0 !important;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.3) !important;
+  }
+  
+  body.dark-mode .message-bubble.user {
+    background-color: #1e3a5f !important;
+  }
+  
+  body.dark-mode .reasoning-bubble {
+    background-color: #2d2d2d !important;
+    color: #aaaaaa !important;
+  }
+  
+  /* 聊天容器深色样式 */
+  body.dark-mode .chat-container {
+    background-color: #1a1a1a !important;
+  }
+  
+  /* 输入框深色样式 */
+  body.dark-mode textarea,
+  body.dark-mode select {
+    background-color: #2d2d2d !important;
+    color: #e0e0e0 !important;
+    border-color: #444 !important;
+  }
+  
+  /* 按钮深色样式 */
+  body.dark-mode button {
+    color: #e0e0e0 !important;
+  }
+  
+  body.dark-mode .send-button {
+    background-color: #1976d2 !important;
+  }
+  
+  /* 头部区域深色样式 */
+  body.dark-mode .header {
+    background-color: #232323 !important;
+    border-bottom: 1px solid #333 !important;
+  }
+  
+  /* 对话轮次深色样式 */
+  body.dark-mode .turns-counter {
+    background-color: #2d2d2d !important;
+    color: #e0e0e0 !important;
+  }
+  
+  /* 代码块深色样式 */
+  body.dark-mode pre {
+    background-color: #2a2a2a !important;
+    border: 1px solid #444 !important;
+  }
+  
+  body.dark-mode code {
+    background-color: #2a2a2a !important;
+    color: #e0e0e0 !important;
+  }
+  
+  /* 清除按钮深色样式 */
+  body.dark-mode .clear-button {
+    color: #ef5350 !important;
+  }
+  
+  /* 新建聊天按钮深色样式 */
+  body.dark-mode .new-chat-button {
+    background-color: #2d2d2d !important;
+    border-bottom: 1px solid #444 !important;
+    color: #e0e0e0 !important;
+    margin-top: 0 !important; /* 确保没有上边距 */
+  }
+  
+  body.dark-mode .new-chat-button:hover {
+    background-color: #3a3a3a !important;
+  }
+  
+  /* 对话数字标签深色样式 */
+  body.dark-mode .conversation-number {
+    background-color: #3a3a3a !important;
+    color: #aaa !important;
+  }
+  
+  /* 激活状态的数字标签 */
+  body.dark-mode .conversation-item.active .conversation-number {
+    background-color: #304254 !important;
+    color: #ccc !important;
+  }
+  
+  /* 标题深色样式 */
+  body.dark-mode .title-area {
+    border-bottom-color: #333 !important;
+  }
+  
+  body.dark-mode .title-area h1 {
+    color: #b0c4de !important; /* 使用亮蓝灰色，在深色背景下更醒目 */
+  }
+  
+  /* 确保两侧边框线颜色一致 */
+  body.dark-mode .header {
+    border-bottom-color: #333 !important;
+  }
+  
+  /* 侧边栏切换按钮深色样式 */
+  body.dark-mode .sidebar-toggle-btn {
+    color: #b0c4de !important;
+  }
+  
+  body.dark-mode .sidebar-toggle-btn:hover {
+    background-color: #333 !important;
+  }
+  
+  /* 应用图标深色模式样式 */
+  body.dark-mode .app-icon {
+    background-color: #304254 !important;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2) !important;
+  }
+  
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  
+  .copy-feedback {
+    animation: fadeIn 0.3s ease;
+  }
+  
+  /* 深色模式下的复制反馈 */
+  body.dark-mode .copy-feedback {
+    background-color: #2d2d2d !important;
+    color: #e0e0e0 !important;
+  }
+  
+  /* 时间戳深色样式 */
+  body.dark-mode .message-timestamp {
+    color: #777 !important;
   }
 `;
 document.head.appendChild(style);
