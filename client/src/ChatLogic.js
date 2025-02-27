@@ -135,10 +135,43 @@ export const useChatLogic = () => {
   // 创建 updateState 实例
   const updateStateInstance = updateState(setReasoningText, setCurrentResponse, scrollToBottom);
 
+  // 添加 updateMessageHistory 辅助函数
+  const updateMessageHistory = (currentMessages, newMessage) => {
+    const newDisplayMessages = [...currentMessages, newMessage];
+    
+    // 更新对话历史，保持当前对话的所有属性
+    const updatedConversations = conversations.map(conv => {
+      if (conv.active) {
+        // 获取第一条用户消息作为标题（如果还没有标题）
+        const firstUserMessage = conv.messages.find(msg => msg.role === 'user');
+        const title = conv.title === '新对话' && firstUserMessage 
+          ? firstUserMessage.content.slice(0, 30) 
+          : conv.title;
+        
+        return {
+          ...conv,
+          title,
+          messages: newDisplayMessages,
+          timestamp: Date.now()
+        };
+      }
+      return conv;
+    });
+
+    // 更新状态和本地存储
+    setDisplayMessages(newDisplayMessages);
+    setRequestMessages([...requestMessages, {
+      role: 'assistant',
+      content: newMessage.content
+    }]);
+    localStorage.setItem('chatHistory', JSON.stringify(updatedConversations));
+    setConversations(updatedConversations);
+  };
+
   // 消息处理函数
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!input.trim()) return;
+    if (!input.trim() || streaming) return;
 
     const messageId = Date.now().toString();
     const newMessage = { 
@@ -185,7 +218,7 @@ export const useChatLogic = () => {
     try {
       const controller = new AbortController();
       setAbortController(controller);
-
+      
       const response = await fetch(`${serverURL}/api/chat`, {
         method: 'POST',
         headers: {
@@ -199,6 +232,10 @@ export const useChatLogic = () => {
         signal: controller.signal
       });
 
+      if (!response.ok) {
+        throw new Error(`API 请求失败: ${response.status}`);
+      }
+
       await handleStreamResponse(response, updatedDisplayMessages);
       
       setHighlightedMessageId(messageId);
@@ -206,41 +243,38 @@ export const useChatLogic = () => {
 
     } catch (error) {
       if (error.name === 'AbortError') {
-        console.log('请求被中止');
-        return;
+        console.log('请求被用户取消');
+      } else {
+        console.error('请求失败:', error);
+        setStreaming(false);
+        const errorMessage = {
+          role: 'assistant',
+          content: '请求失败：' + error.message
+        };
+        updateMessageHistory(updatedDisplayMessages, errorMessage);
       }
-      console.error('请求失败:', error);
-      setStreaming(false);
-      const errorMessage = {
-        role: 'assistant',
-        content: '发生错误：' + error.message
-      };
-      setDisplayMessages(prev => [...prev, errorMessage]);
-      setRequestMessages(prev => [...prev, errorMessage]);
     } finally {
       setAbortController(null);
     }
   };
 
   // 处理停止生成
-  const handleStop = () => {
+  const handleStop = async () => {
     if (abortController) {
       abortController.abort();
-      setStreaming(false);
       setAbortController(null);
-      
-      if (currentResponse || reasoningText) {
-        const finalMessage = {
-          role: 'assistant',
-          content: currentResponse,
-          reasoning_content: reasoningText
-        };
-        setDisplayMessages(prev => [...prev, finalMessage]);
-        setRequestMessages(prev => [...prev, {
-          role: 'assistant',
-          content: currentResponse
-        }]);
-      }
+    }
+    
+    setStreaming(false);
+    
+    // 如果有已生成的内容，保存为一条消息
+    if (currentResponse || reasoningText) {
+      const newMessage = {
+        role: 'assistant',
+        content: currentResponse,
+        reasoning_content: reasoningText
+      };
+      updateMessageHistory(displayMessages, newMessage);
     }
   };
 
@@ -253,7 +287,6 @@ export const useChatLogic = () => {
     let currentIsReasoning = true;
 
     try {
-      // 开始流式响应前清空当前响应
       setCurrentResponse('');
       setReasoningText('');
       setIsReasoning(true);
@@ -269,76 +302,52 @@ export const useChatLogic = () => {
           if (line.startsWith('data: ')) {
             const data = line.slice(5).trim();
             if (data === '[DONE]') {
-              const finalMessage = {
+              setStreaming(false);
+              // 更新消息历史
+              const newMessage = {
                 role: 'assistant',
                 content: responseText,
                 reasoning_content: reasoningText
               };
-              const newDisplayMessages = [...currentMessages, finalMessage];
-              
-              // 更新对话历史，保持当前对话的所有属性
-              const updatedConversations = conversations.map(conv => {
-                if (conv.active) {
-                  // 获取第一条用户消息作为标题（如果还没有标题）
-                  const firstUserMessage = conv.messages.find(msg => msg.role === 'user');
-                  const title = conv.title === '新对话' && firstUserMessage 
-                    ? firstUserMessage.content.slice(0, 30) 
-                    : conv.title;
-                  
-                  return {
-                    ...conv,
-                    title,
-                    messages: newDisplayMessages,
-                    timestamp: Date.now()
-                  };
+              updateMessageHistory(currentMessages, newMessage);
+            } else {
+              try {
+                const parsed = JSON.parse(data);
+                const content = parsed.choices[0]?.delta?.content;
+                const reasoningContent = parsed.choices[0]?.delta?.reasoning_content;
+                
+                if (content) {
+                  responseText += content;
+                  setCurrentResponse(responseText);
+                  if (currentIsReasoning) {
+                    currentIsReasoning = false;
+                    setIsReasoning(false);
+                  }
                 }
-                return conv;
-              });
-
-              // 更新状态和本地存储
-              setDisplayMessages(newDisplayMessages);
-              setRequestMessages([...requestMessages, {
-                role: 'assistant',
-                content: responseText
-              }]);
-              localStorage.setItem('chatHistory', JSON.stringify(updatedConversations));
-              setConversations(updatedConversations);
-              setStreaming(false);
-              return;
-            }
-
-            try {
-              const parsed = JSON.parse(data);
-              const content = parsed.choices[0]?.delta?.content;
-              const reasoningContent = parsed.choices[0]?.delta?.reasoning_content;
-
-              if (reasoningContent) {
-                reasoningText += reasoningContent;
-                setReasoningText(reasoningText);
-                setIsReasoning(true);
-                currentIsReasoning = true;
-              } else if (content) {
-                // 不再重置推理状态，只累积响应内容
-                responseText += content;
-                setCurrentResponse(responseText);
-                // 如果是第一个内容，设置不再处于推理阶段
-                if (currentIsReasoning) {
-                  currentIsReasoning = false;
-                  setIsReasoning(false);
+                if (reasoningContent) {
+                  reasoningText += reasoningContent;
+                  setReasoningText(reasoningText);
+                  setIsReasoning(true);
                 }
+              } catch (e) {
+                console.error('解析响应出错:', e);
               }
-            } catch (e) {
-              console.error('解析响应出错:', e);
             }
           }
         }
       }
     } catch (error) {
       if (error.name === 'AbortError') {
-        console.log('流式响应被中止');
-        return;
+        console.log('请求被用户取消');
+      } else {
+        console.error('流式处理错误:', error);
+        setStreaming(false);
+        const errorMessage = {
+          role: 'assistant',
+          content: '处理响应时出错：' + error.message
+        };
+        updateMessageHistory(currentMessages, errorMessage);
       }
-      throw error;
     }
   };
 
@@ -360,6 +369,9 @@ export const useChatLogic = () => {
     setIsReasoning(true);
 
     try {
+      const controller = new AbortController();
+      setAbortController(controller);
+
       const response = await fetch(`${serverURL}/api/chat`, {
         method: 'POST',
         headers: {
@@ -369,19 +381,29 @@ export const useChatLogic = () => {
           messages: requestMsgs,
           model: selectedModel,
           stream: true
-        })
+        }),
+        signal: controller.signal
       });
+
+      if (!response.ok) {
+        throw new Error(`API 请求失败: ${response.status}`);
+      }
 
       await handleStreamResponse(response, previousMessages);
     } catch (error) {
-      console.error('重试失败:', error);
-      setStreaming(false);
-      const errorMessage = {
-        role: 'assistant',
-        content: '重试失败：' + error.message
-      };
-      setDisplayMessages(prev => [...prev, errorMessage]);
-      setRequestMessages(prev => [...prev, errorMessage]);
+      if (error.name === 'AbortError') {
+        console.log('请求被用户取消');
+      } else {
+        console.error('重试失败:', error);
+        setStreaming(false);
+        const errorMessage = {
+          role: 'assistant',
+          content: '重试失败：' + error.message
+        };
+        updateMessageHistory(previousMessages, errorMessage);
+      }
+    } finally {
+      setAbortController(null);
     }
   };
 
@@ -608,6 +630,39 @@ export const useChatLogic = () => {
     document.body.classList.toggle('dark-mode', darkMode);
   }, [darkMode]);
 
+  const handleFileUpload = async (e) => {
+    const files = e.target.files;
+    const formData = new FormData();
+    
+    for (let file of files) {
+      formData.append('documents', file);
+    }
+    
+    try {
+      const response = await fetch(`${serverURL}/upload`, {
+        method: 'POST',
+        body: formData
+      });
+      
+      if (!response.ok) {
+        throw new Error('上传失败');
+      }
+      
+      // 显示上传成功消息
+      setDisplayMessages(prev => [...prev, {
+        role: 'system',
+        content: '文档上传成功！现在你可以询问关于这些文档的问题了。'
+      }]);
+      
+    } catch (error) {
+      console.error('文件上传失败:', error);
+      setDisplayMessages(prev => [...prev, {
+        role: 'system',
+        content: '文档上传失败：' + error.message
+      }]);
+    }
+  };
+
   return {
     displayMessages,
     input,
@@ -637,6 +692,7 @@ export const useChatLogic = () => {
     formatTime,
     loadingHistory,
     currentTurns: getCurrentTurns(requestMessages),
-    highlightedMessageId
+    highlightedMessageId,
+    handleFileUpload
   };
 }; 

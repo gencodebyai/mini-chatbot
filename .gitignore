@@ -21,7 +21,13 @@ yarn-error.log*
 *.njsproj
 *.sln
 *.sw?
-
+venv/
 # 系统文件
 .DS_Store
-Thumbs.db 
+Thumbs.db
+
+server/venv/
+
+server/node_modules/
+
+client/node_modules/

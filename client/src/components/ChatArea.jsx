@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import MessageBubble from './MessageBubble';
+import { serverURL } from '../Config';
 
 const ChatArea = ({
   selectedModel,
@@ -27,6 +28,52 @@ const ChatArea = ({
   setInput,
   handleStop
 }) => {
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState(null);
+
+  const handleFileUpload = async (event) => {
+    setUploading(true);
+    setUploadProgress(0);
+    setUploadError(null);
+    const files = event.target.files;
+    const formData = new FormData();
+    
+    for (let file of files) {
+      formData.append('documents', file);
+    }
+    
+    try {
+      console.log('开始上传文件:', files);
+      const response = await fetch(`${serverURL}/upload`, {
+        method: 'POST',
+        body: formData,
+        onUploadProgress: (progressEvent) => {
+          const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+          setUploadProgress(progress);
+          console.log(`上传进度: ${progress}%`);
+        }
+      });
+      
+      const result = await response.json();
+      console.log('上传结果:', result);
+      
+      if (response.ok) {
+        setInput('文档已上传，您可以开始提问了');
+        // 可以添加一个成功提示
+      } else {
+        throw new Error(result.error || '上传失败');
+      }
+    } catch (error) {
+      console.error('文件上传错误:', error);
+      setUploadError(error.message);
+    } finally {
+      setUploading(false);
+      setUploadProgress(0);
+      event.target.value = ''; // 清空文件选择
+    }
+  };
+
   return (
     <div style={{ 
       flex: 1,
@@ -137,6 +184,59 @@ const ChatArea = ({
           >
             {darkMode ? '☀️' : '🌙'}
           </button>
+
+          {/* 文档上传按钮和状态显示 */}
+          <div style={{ display: 'flex', alignItems: 'center' }}>
+            <input
+              type="file"
+              id="document-upload"
+              multiple
+              accept=".txt,.pdf,.doc,.docx"
+              style={{ display: 'none' }}
+              onChange={handleFileUpload}
+            />
+            <button
+              onClick={() => document.getElementById('document-upload').click()}
+              disabled={uploading}
+              style={{
+                padding: '8px 12px',
+                backgroundColor: darkMode ? '#2d2d2d' : '#fff',
+                border: `1px solid ${darkMode ? '#444' : '#e0e0e0'}`,
+                borderRadius: '8px',
+                color: darkMode ? '#e0e0e0' : '#333',
+                cursor: uploading ? 'not-allowed' : 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                opacity: uploading ? 0.7 : 1
+              }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+                <polyline points="17 8 12 3 7 8"/>
+                <line x1="12" y1="3" x2="12" y2="15"/>
+              </svg>
+              {uploading ? '上传中...' : '上传文档'}
+            </button>
+
+            {uploading && (
+              <div style={{
+                marginLeft: '8px',
+                color: darkMode ? '#e0e0e0' : '#666'
+              }}>
+                {uploadProgress}%
+              </div>
+            )}
+
+            {uploadError && (
+              <div style={{
+                marginLeft: '8px',
+                color: '#ef5350'
+              }}>
+                上传失败: {uploadError}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -227,11 +327,13 @@ const ChatArea = ({
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
-                handleSubmit(e);
-                e.target.style.height = '32px';
+                if (!streaming) {  // 只有在非流式输出时才允许发送
+                  handleSubmit(e);
+                  e.target.style.height = '32px';
+                }
               }
             }}
-            disabled={streaming}
+            disabled={streaming}  // 在流式输出时禁用输入框
             style={{ 
               flex: 1, 
               padding: '6px 12px',

@@ -58,6 +58,8 @@ const MessageBubble = ({
         transform: id === highlightedMessageId ? 'scale(1.02)' : 'scale(1)',
         cursor: 'pointer'
       }}
+      onMouseEnter={() => setShowButtons(true)}
+      onMouseLeave={() => setShowButtons(false)}
     >
       {/* 推理内容部分 */}
       {reasoningContent && (
@@ -200,33 +202,27 @@ const MessageBubble = ({
               {content}
             </div>
 
-            {/* 操作按钮 - 统一放在消息下方 */}
-            {showButtons && !isEditing && content && (
+            {/* 操作按钮 */}
+            {!isStreaming && (showButtons || isEditing) && (
               <div style={{
                 display: 'flex',
                 gap: '8px',
-                marginTop: '8px',
-                justifyContent: isUser ? 'flex-start' : 'flex-end',
-                opacity: 0.8,
-                transition: 'opacity 0.2s'
+                justifyContent: isUser ? 'flex-end' : 'flex-start',
+                marginTop: '4px'
               }}>
-                {/* 复制按钮 */}
+                {/* 复制按钮 - 对所有消息显示 */}
                 <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onCopy(content);
-                  }}
+                  onClick={() => onCopy && onCopy(content)}
                   style={{
                     border: 'none',
                     background: 'none',
-                    padding: '4px',
+                    padding: '4px 8px',
                     cursor: 'pointer',
-                    color: darkMode ? '#aaaaaa' : '#666',
-                    borderRadius: '4px',
                     display: 'flex',
                     alignItems: 'center',
                     gap: '4px',
-                    fontSize: '12px'
+                    fontSize: '12px',
+                    color: darkMode ? '#aaaaaa' : '#666666'
                   }}
                   title="复制"
                 >
@@ -237,53 +233,47 @@ const MessageBubble = ({
                   复制
                 </button>
 
-                {/* AI回复的重试按钮 */}
-                {!isUser && onRetry && !isStreaming && (
+                {/* 重试按钮 - 仅对 AI 消息显示 */}
+                {!isUser && onRetry && (
                   <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onRetry();
-                    }}
+                    onClick={onRetry}
                     style={{
                       border: 'none',
                       background: 'none',
-                      padding: '4px',
+                      padding: '4px 8px',
                       cursor: 'pointer',
-                      color: darkMode ? '#aaaaaa' : '#666',
-                      borderRadius: '4px',
                       display: 'flex',
                       alignItems: 'center',
                       gap: '4px',
-                      fontSize: '12px'
+                      fontSize: '12px',
+                      color: darkMode ? '#aaaaaa' : '#666666'
                     }}
                     title="重试"
                   >
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M21 12a9 9 0 11-9-9c2.52 0 4.85.83 6.72 2.24"/>
-                      <path d="M21 3v9h-9"/>
+                      <path d="M21 2v6h-6"/>
+                      <path d="M3 12a9 9 0 0115-6.7L21 8"/>
+                      <path d="M3 22v-6h6"/>
+                      <path d="M21 12a9 9 0 01-15 6.7L3 16"/>
                     </svg>
                     重试
                   </button>
                 )}
 
-                {/* 用户消息的编辑按钮 */}
-                {isUser && onEdit && !isStreaming && (
+                {/* 编辑按钮 - 仅对用户消息显示 */}
+                {isUser && onEdit && !isEditing && (
                   <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setIsEditing(true);
-                    }}
+                    onClick={() => setIsEditing(true)}
                     style={{
                       border: 'none',
                       background: 'none',
-                      padding: '4px',
+                      padding: '4px 8px',
                       cursor: 'pointer',
-                      color: darkMode ? '#aaaaaa' : '#666',
-                      borderRadius: '4px',
                       display: 'flex',
                       alignItems: 'center',
                       gap: '4px',
-                      fontSize: '12px'
+                      fontSize: '12px',
+                      color: darkMode ? '#aaaaaa' : '#666666'
                     }}
                     title="编辑"
                   >
