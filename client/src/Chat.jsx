@@ -37,6 +37,18 @@ function Chat() {
     loadingHistory
   } = useChatLogic();
 
+  const [files, setFiles] = React.useState([]);
+
+  const handleUpload = async (formData) => {
+    try {
+      const response = await axios.post('/api/upload', formData);
+      setFiles([]);
+    } catch (error) {
+      console.error('上传失败:', error);
+      alert(`上传失败: ${error.response?.data?.error || error.message}`);
+    }
+  };
+
   return (
     <div className="main-container" style={{
       display: 'flex',

@@ -59,7 +59,7 @@ const ChatArea = ({
       console.log('上传结果:', result);
       
       if (response.ok) {
-        setInput('文档已上传，您可以开始提问了');
+        setInput('');
         // 可以添加一个成功提示
       } else {
         throw new Error(result.error || '上传失败');
